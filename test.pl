@@ -143,10 +143,7 @@ $ok = 1;
 ++$number;
 $pid = fork;
 defined $pid or die $!;
-$SIG{'ALRM'} = \&wake_up;
-sub wakeup {
-    1;
-}
+$SIG{'ALRM'} = sub { 1; };
 $shm_bufsiz = &IPC::Shareable::SHM_BUFSIZ;
 if ($pid == 0) {
     # --- Child

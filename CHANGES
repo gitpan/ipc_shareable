@@ -57,3 +57,9 @@ Revision history for Perl extension IPC::Shareable.
           and rolls back over to 0; Maurice Aubrey <maurice@hevanet.com>.
         - patch to quieten things down under -w; Doug MacEachern
           <dougm@telebusiness.co.nz>
+
+0.30 Mon Jan 19 11:13:41 EST 1998
+        - Added SEM_UNDO to semop() calls; Maurice Aubrey.
+        - Fixed some bugs in the locking code; Maurice Aubrey.
+        - Made calls to debug() conditional for efficency; Maurice Aubrey.
+        - Fixed a signal handler in test.pl; Maurice Aubrey.

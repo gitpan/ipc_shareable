@@ -14,7 +14,7 @@ use vars qw($VERSION $AUTOLOAD
 use subs qw(IPC_CREAT IPC_EXCL IPC_RMID IPC_STAT IPC_PRIVATE
 	    SHM_BUFSIZ SHM_HEADSIZE SHM_FOOTSIZE
 	    SHM_VERSSEM SHM_RLOCKSEM SHM_WLOCKSEM
-	    GETVAL SETVAL GETALL
+	    GETVAL SETVAL GETALL SEM_UNDO
 	    debug parse_argument_hash
 	    tie_to_shm read_shm_variable
 	    write_shm_variable read_shm_header
@@ -28,7 +28,7 @@ use AutoLoader;
 @ISA = qw(DynaLoader);
 
 # --- Package globals
-$VERSION = '0.29';
+$VERSION = '0.30';
 $Package = 'IPC::Shareable';
 $Debug = ($Debug or undef);
 $MAXVER  = 32767;
@@ -103,7 +103,7 @@ sub FETCH {
     my($variable, @args) = @_;
     my($data_ref, $key, $type, $semid, $arg);
     my($their_version, $our_version);
-    debug "$Package\:\:FETCH: fetching $variable ($$variable)";
+    debug "fetching $variable ($$variable)" if ($Debug);
     $type = $Shm_Info{$$variable}{'type'};
 
     # --- Check the cache first; Get the sem_id
@@ -112,22 +112,23 @@ sub FETCH {
     # --- Get the public version number
     $arg = 0;
     $their_version = semctl($semid, SHM_VERSSEM, GETVAL, $arg) or
-	croak "$Package\:\:FETCH: semctl returned false";
-    debug "$Package\:\:FETCH: public version number is $their_version";
+	croak "$Package\:\:FETCH: semctl returned false: $!";
+    debug "public version number is $their_version" if ($Debug);
 
     # --- Get our version number
     $our_version = $Shm_Info{$$variable}{'version'};
-    debug "$Package\:\:FETCH: private version number is $our_version";
+    debug "private version number is $our_version" if ($Debug);
 
     # --- Just use our cached value if the version is the same
     if ($their_version eq $our_version) {
-	debug "$Package\:\:FETCH: returning value for $variable ($$variable) from local cache";
+	debug "returning value for $variable ($$variable) from local cache"
+          if ($Debug);
     } else  {
 	# --- Retrieve the proper value
 	$Shm_Info{$$variable}{'DATA'} = read_shm_variable($variable);
 
 	# --- Attach any associated data
-	debug "$Package\:\:FETCH: looking for things magically attached to $$variable";
+	debug "looking for things magically attached to $$variable" if ($Debug);
 	attach_magic_tie($variable, $type) or
 	    croak "$Package\:\:FETCH: couldn't magic tie additional data to $$variable\n";
 	
@@ -138,11 +139,11 @@ sub FETCH {
     # --- Dereference in the appropriate manner, and return
     TYPE: {
 	if ($type eq 'SCALAR') {
-	    debug "$Package\:\:FETCH: $variable is indeed a SCALAR";
+	    debug "$variable is indeed a SCALAR" if ($Debug);
 	    return ${$Shm_Info{$$variable}{'DATA'}{'user'}};
         }
 	if ($type eq 'HASH') {
-	    debug "$Package\:\:FETCH: $variable is indeed a HASH";
+	    debug "$variable is indeed a HASH" if ($Debug);
 	    ($key) = (@args);
 	    if (defined $key) {
 		return $Shm_Info{$$variable}{'DATA'}{'user'}{$key};
@@ -159,12 +160,12 @@ sub STORE {
     my($variable, @args) = @_;
     my($key, $value, $type, $semid, $arg, $version, $opstring);
     my($ref_type);
-    debug "$Package\:\:STORE: storing $variable, @args";
+    debug "storing $variable, @args" if ($Debug);
 
     # --- Update our local cache (note we can't ref($variable) to get its type
     # --- since it's been blessed
     $type = $Shm_Info{$$variable}{'type'};
-    debug "$Package\:\:STORE: $variable is a $type";
+    debug "$variable is a $type" if ($Debug);
   TYPE: {
       if ($type eq 'SCALAR') {
 	  # --- Here we don't care what the other version is since we're completely
@@ -187,12 +188,12 @@ sub STORE {
 	  # --- the authoritative record.
 	  ($key, $value) = @args;
 	  if (defined $key) {
-	      debug "$Package\:\:STORE: making incremental change to HASH";
+	      debug "making incremental change to HASH" if ($Debug);
 	      # --- Incremental change: fetch the most recent public version.
 	      FETCH($variable);
 	      $Shm_Info{$$variable}{'DATA'}{'user'}{$key} = $value;
 	  } else {
-	      debug "$Package\:\:STORE: making wholesale change to HASH";
+	      debug "making wholesale change to HASH" if ($Debug);
 	      # --- Wholesale change; ignore any existing public version.
 	      1;
 	  }
@@ -207,7 +208,8 @@ sub STORE {
 	  # --- the thingy being referenced too
 	  $ref_type = ref $value;
 	  last MAGIC unless ($ref_type eq 'SCALAR' or $ref_type eq 'HASH');
-	  debug "$Package\:\:STORE: $value is a reference; tying the referenced thingy too";
+	  debug "$value is a reference; tying the referenced thingy too"
+            if ($Debug);
 
 	  # --- Do it, unless the thingy being referenced is not empty
 	  if ($ref_type eq 'SCALAR') {
@@ -224,7 +226,7 @@ sub STORE {
 
     # --- We leave here if we're in the middle of a hash iteration
     if ($Shm_Info{$$variable}{'hash_iterating'}) {
-	debug "$Package\:\:STORE: $$variable is an interating HASH: returning";
+	debug "$$variable is an interating HASH: returning" if ($Debug);
 	return;
     }
 
@@ -237,8 +239,8 @@ sub STORE {
     # --- Diagnostic
     $arg = 0; # :-(
     $version = semctl($semid, 0, GETVAL, $arg) or
-	croak "$Package\:\:STORE: semctl returned false";
-    debug "$Package\:\:STORE: previous version number was $version";
+	croak "$Package\:\:STORE: semctl returned false: $!";
+    debug "previous version number was $version" if ($Debug);
 
     # --- Increment it
     if ($version >= $MAXVER) { # semop will fail if we roll over
@@ -250,8 +252,8 @@ sub STORE {
     }
     # --- Diagnostic
     $version = semctl($semid, 0, GETVAL, $arg) or
-	croak "$Package\:\:STORE: semop returned false";
-    debug "$Package\:\:STORE: new version number is $version";
+	croak "$Package\:\:STORE: semop returned false: $!";
+    debug "new version number is $version" if ($Debug);
     $Shm_Info{$$variable}{'version'} = $version;
 
     # --- Done
@@ -264,7 +266,7 @@ sub DESTROY {
     my($variable) = @_;
     my($argument, $key, $shmid, $fragment, $semid, $thingy);
     my(@shmids, @fragments, @things);
-    debug "$Package\:\:DESTROY called on $variable ($$variable)";
+    debug "called on $variable ($$variable)" if ($Debug);
     $argument = 0;
 
     # --- We should unlock the variable regardless of whether destroy
@@ -278,18 +280,18 @@ sub DESTROY {
     @fragments = (keys %{$Shm_Info{$$variable}{'frag_id'}});
     foreach $fragment (@fragments) {
 	$shmid = $Shm_Info{$$variable}{'frag_id'}{$fragment};
-	debug "$Package\:\:DESTROY: calling shmctl($shmid, IPC_RMID, $argument)";
+	debug "calling shmctl($shmid, IPC_RMID, $argument)" if ($Debug);
 	# --- Don't carp since another process may have reaped this segment
 	shmctl($shmid, IPC_RMID, $argument) or
-	    debug "$Package\:\:DESTROY: shmctl control returned false during clean up";
+	    croak "shmctl control returned false during clean up";
     }
 
     # --- Now smoke the associated semaphore
     $semid = $Shm_Info{$$variable}{'sem_id'};
-    debug "$Package\:\:DESTROY: calling semctl($semid, 0, IPC_RMID, $argument)";
+    debug "calling semctl($semid, 0, IPC_RMID, $argument)" if ($Debug);
     # --- Similar to above, carp is not needed
     semctl($semid, 0, IPC_RMID, $argument) or
-	debug "$Package\:\:DESTROY: shmctl control returned false during clean up";
+	croak "shmctl control returned false during clean up: $!";
 
     # --- Lastly, remove our local information
     delete $Shm_Info{$$variable};
@@ -310,13 +312,13 @@ sub parse_argument_hash {
     $key = ($$arguments{'key'} or IPC_PRIVATE);
     if ($key =~ /^\d+$/) {
 	# --- $key is numeric; take as is
-	debug "$Package\:\:parse_argument_hash: $key is numeric";
+	debug "$key is numeric" if ($Debug);
     } else {
 	# --- create a numeric key; THIS ONLY USES THE FIRST FOUR CHARACTERS!!!!
-	debug "$Package\:\:parse_argument_hash: $key is alphabetic";
+	debug "$key is alphabetic" if ($Debug);
 	$key = pack('A4', $key);
 	$key = unpack('i', $key);
-	debug "$Package\:\:parse_argument_hash: \$key is now $key";
+	debug "\$key is now $key" if ($Debug);
     }
     $shm_info{'key'} = $key;
 
@@ -329,7 +331,7 @@ sub parse_argument_hash {
     } else {
 	$create = 0;
     }
-    debug "$Package\:\:parse_argument_hash: \$create is $create"; 
+    debug "\$create is $create" if ($Debug); 
 
     # --- Determine whether they want an exclusive one or not
     $exclusive = ($$arguments{'exclusive'} or '');
@@ -340,7 +342,7 @@ sub parse_argument_hash {
     } else {
 	$exclusive = 0;
     }
-    debug "$Package\:\:parse_argument_hash: \$exclusive is $exclusive";
+    debug "\$exclusive is $exclusive" if ($Debug);
 
     # --- Get the access modes they want
     $mode = ($$arguments{'mode'} or 0666); # - At some point, add a hook to accept symbolic values
@@ -358,7 +360,7 @@ sub parse_argument_hash {
     } else {
 	undef $destroy;
     }
-    debug "$Package\:\:parse_argument_hash: \$destroy is $destroy" if $destroy;
+    debug "\$destroy is $destroy" if (($Debug) and ($destroy));
     $shm_info{'destroy'} = $destroy;
 
     # --- Return the desired values
@@ -375,19 +377,19 @@ sub tie_to_shm {
     # --- Parse the arguments
     if (ref $arg1 eq 'HASH') {
 	# --- They've passed arguments as a hash
-	debug "$Package\:\:tie_to_shm: arguments passed as HASH";
+	debug "arguments passed as HASH" if ($Debug);
 	$options = $arg1;
     } elsif (ref $other_args eq 'HASH') {
-	debug "$Package\:\:tie_to_shm: arguments passed as glue, hash";
+	debug "arguments passed as glue, hash" if ($Debug);
 	# --- The first arg is assumed to be glue; options come in %$other_args
 	$$other_args{'key'} = $arg1;
 	$options = $other_args;
     } elsif (defined $arg1 and not defined $other_args) {
-	debug "$Package\:\:tie_to_shm: arguments passed as glue only";
+	debug "arguments passed as glue only" if ($Debug);
 	# --- They've passed no %options hash ref; create one
 	$options = { 'key' => $arg1 };
     } elsif (not defined $arg1 and not defined $other_args) {
-	debug "$Package\:\:tie_to_shm: no arguments passed";
+	debug "no arguments passed" if ($Debug);
 	# --- No arguments whatsoever
 	$options = { 'key' => 0 };
     } else {
@@ -399,11 +401,11 @@ sub tie_to_shm {
     $shm_info = parse_argument_hash($options) or return;
 
     # --- Now get the shared memory id
-    debug "$Package\:\:tie_to_shm: calling shmget($$shm_info{'key'}, SHM_BUFSIZ, $$shm_info{'flags'})";
-    $shmid = shmget($$shm_info{'key'}, SHM_BUFSIZ, $$shm_info{'flags'}) or
-	debug "$Package\:\:tie_to_shm: shmget returned false";
-    defined $shmid or return;
-    debug "$Package\:\:tie_to_shm: got \$shmid of $shmid";
+    debug "calling shmget($$shm_info{'key'}, SHM_BUFSIZ, $$shm_info{'flags'})"
+      if ($Debug);
+    defined($shmid = shmget($$shm_info{'key'}, SHM_BUFSIZ, $$shm_info{'flags'})) or
+	croak "shmget returned undef: $!";
+    debug "got \$shmid of $shmid" if ($Debug);
 
     # --- Store the results of parsing the argument hash
     while (($key, $value) = each %$shm_info) {
@@ -416,30 +418,37 @@ sub tie_to_shm {
     # --- Create the semaphore flags we'll use for locking and version control
     # --- (Sometimes this has already been done if it's a magic tie
     unless ($semid = $Shm_Info{$shmid}{'sem_id'}) {
-	debug "$Package\:\:tie_to_shm: calling semget($$shm_info{'key'}, 3, $$shm_info{'flags'})";
-	$semid= semget($$shm_info{'key'}, 3, $$shm_info{'flags'}) or
-	    debug "$Package\:\:tie_to_shm: semget returned false ($!)";
-	defined $semid or return;
+	debug "calling semget($$shm_info{'key'}, 3, $$shm_info{'flags'})"
+          if ($Debug);
+	defined($semid= semget($$shm_info{'key'}, 3, $$shm_info{'flags'})) or
+	   croak "semget returned undef: $!";
 	$Shm_Info{$shmid}{'sem_id'} = $semid;
     }
-    debug "$Package\:\:tie_to_shm: semid associated with $shmid is $semid";
+    debug "semid associated with $shmid is $semid" if ($Debug);
+
+    # --- Obtain a RW lock
+    $opstring = pack('sss sss sss sss', 
+                     SHM_WLOCKSEM, 0, 0, 
+                     SHM_RLOCKSEM, 0, 0,
+                     SHM_WLOCKSEM, 1, SEM_UNDO,
+                     SHM_RLOCKSEM, 1, SEM_UNDO);
+    semop($semid, $opstring) or
+      croak "$Package\:\:tie_to_shm: returned false: $!";
+    $Shm_Info{$shmid}{'lock'} = 'true';
 
     # --- Get (or create) the version number
     $arg = 0; # - Not used for anything but Perl complains if I don't have it
     $version = semctl($semid, 0, GETVAL, $arg) or
-	croak "$Package\:\:tie_to_shm: semctl returned false";
+	croak "$Package\:\:tie_to_shm: semctl returned false: $!";
     $version =~ tr/0-9//cd; # - semctl returns '0 but true' if the C function returns (int) 0.
-    debug "$Package\:\:tie_to_shm: version number is $version";
+    debug "version number is $version" if ($Debug);
     if ($version == 0) {
 	# --- Must be the first version of this variable; set version number to 1
-	debug "$Package\:\:tie_to_shm: creating initial version of $shmid";
-	debug "$Package\:\:tie_to_shm: setting read/write lock semaphores to 1";
-	$opstring = pack('sss sss sss',
-			 SHM_VERSSEM,  1, 0,
-			 SHM_RLOCKSEM, 1, 0,
-			 SHM_WLOCKSEM, 1, 0);
+	debug "creating initial version of $shmid" if ($Debug);
+	debug "setting read/write lock semaphores to 1" if ($Debug);
+	$opstring = pack('sss', SHM_VERSSEM, 1, 0);
 	semop($semid, $opstring) or
-	    croak "$Package\:\:tie_to_shm: returned false";
+	    croak "$Package\:\:tie_to_shm: returned false: $!";
 	# --- Initialize the variable to be empty at first
 	if ($type eq 'SCALAR') {
 	    $Shm_Info{$shmid}{'DATA'}{'user'} = \$empty;
@@ -453,7 +462,7 @@ sub tie_to_shm {
     } else {
 	# --- This variable must exist already
 	# --- Fill the cache with the current contents of the variable
-	debug "$Package\:\:tie_to_shm: retrieving public version of $shmid";
+	debug "retrieving public version of $shmid" if ($Debug);
 	$Shm_Info{$shmid}{'DATA'} = read_shm_variable(\$shmid);
 
 	# --- Tie any other data structures that may be tied to this one
@@ -461,13 +470,18 @@ sub tie_to_shm {
 	    croak "$Package\:\:tie_to_shm: couldn't magic tie additional data to $shmid\n";
     }
 
-    # --- Confirm the version number
-    $version = semctl($semid, SHM_VERSSEM, GETVAL, $arg) or
-	croak "$Package\:\:tie_to_shm: semctl returned false";
     $Shm_Info{$shmid}{'version'} = $version;
 
     # --- Debugging
     _show_sems($semid) if $Debug;
+
+    # --- Release Lock
+    $opstring = pack('sss sss', 
+                     SHM_WLOCKSEM, -1, SEM_UNDO, 
+                     SHM_RLOCKSEM, -1, SEM_UNDO);
+    semop($semid, $opstring) or
+      croak "$Package\:\:tie_to_shm: returned false: $!";
+    $Shm_Info{$shmid}{'lock'} = undef;
 
     # --- Done
     return $shmid;
@@ -479,15 +493,15 @@ sub read_shm_variable {
     my($shmid) = @_;
     my($frag_id, $length, $frag, $frag_size, $data, $frag_count);
     my($next_frag_id, $more_frags, $semid, $opstring, $ref);
-    debug "$Package\:\:read_shm_variable called on $shmid";
+    debug "called on $shmid" if ($Debug);
 
     # --- Determine the length of the data area (same for all fragments)
     $frag_size = (SHM_BUFSIZ) - (SHM_HEADSIZE) - (SHM_FOOTSIZE);
-    debug "$Package\:\:read_shm_variable: each fragment is $frag_size bytes max";
+    debug "each fragment is $frag_size bytes max" if ($Debug);
 
     # --- Get the id of the first fragment
     $frag_id = $$shmid;
-    debug "$Package\:\:read_shm_variable: first fragment is $frag_id";
+    debug "first fragment is $frag_id" if ($Debug);
     $data = '';
     $frag_count = 0;
 
@@ -495,10 +509,12 @@ sub read_shm_variable {
     # --- has a lock
     unless ($Shm_Info{$$shmid}{'lock'}) {
 	$semid = $Shm_Info{$$shmid}{'sem_id'};
-	debug "$Package\:\:read_shm_variable: \$semid is $semid";
-	$opstring = pack('sss', SHM_WLOCKSEM, -1, 0);
+	debug "\$semid is $semid" if ($Debug);
+	$opstring = pack('sss sss', 
+                         SHM_WLOCKSEM, 0, 0, 
+                         SHM_WLOCKSEM, 1, SEM_UNDO);
 	semop($semid, $opstring) or
-	    croak "$Package\:\:read_shm_variable: semop returned false";
+	    croak "$Package\:\:read_shm_variable: semop returned false: $!";
     }
 
     # --- Loop through until we get to the end of the data
@@ -506,7 +522,7 @@ sub read_shm_variable {
       
       # --- Read the header
       $length = read_shm_header($frag_id);
-      debug "$Package\:\:read_shm_variable: length of $shmid/$frag_id is $length";
+      debug "length of $shmid/$frag_id is $length" if ($Debug);
 
       # --- If length is greater than the threshold, it indicates there are more fragments to come
       undef $more_frags;
@@ -518,8 +534,8 @@ sub read_shm_variable {
       # --- Read the data
       $frag = '';
       shmread($frag_id, $frag, SHM_HEADSIZE, $length) or
-	  croak "$Package\:\:read_shm_variable: shmread returned false";
-      debug "$Package\:\:read_shm_variable: read $length bytes from $shmid/$frag_id";
+	  croak "$Package\:\:read_shm_variable: shmread returned false: $!";
+      debug "read $length bytes from $shmid/$frag_id" if ($Debug);
 
       # --- Concatenate the data
       $data .= $frag;
@@ -529,7 +545,7 @@ sub read_shm_variable {
 
       # --- There must be more fragments
       $next_frag_id = read_shm_footer($frag_id);
-      debug "$Package\:\:read_shm_variable: next fragment is $next_frag_id";
+      debug "next fragment is $next_frag_id" if ($Debug);
       $Shm_Info{$$shmid}{'frag_id'}{$frag_count + 1} = $next_frag_id;
 
       # --- Increment the fragment count
@@ -541,9 +557,9 @@ sub read_shm_variable {
 
     # --- Release the write lock unless we have an exclusive lock
     unless ($Shm_Info{$$shmid}{'lock'}) {
-	$opstring = pack('sss', SHM_WLOCKSEM, 1, 0);
+	$opstring = pack('sss', SHM_WLOCKSEM, -1, SEM_UNDO);
 	semop($semid, $opstring) or
-	    croak "$Package\:\:read_shm_variable: semop returned false";
+	    croak "$Package\:\:read_shm_variable: semop returned false: $!";
     }
 
     # --- Now turn the concatenated data into a real perl reference
@@ -551,7 +567,7 @@ sub read_shm_variable {
 }
 
 sub write_shm_variable {
-    # --- Writes a variable to shared memory segments.  Waits until all processes
+    # --- Writes a variable to shared memory segments. Waits until all processes
     # --- have stopped reading or writing the variable.
     my($shmid, $var_ref) = @_;
     my($data, $length, $frag_num, $last_frag_length, $frag_count, $template);
@@ -559,14 +575,14 @@ sub write_shm_variable {
     my($shmctl_arg, $shmctl_return, $stale_fragment);
     my($semid, $opstring);
     my(@frags, @stale_fragments);
-    debug "$Package\:\:write_shm_variable called on $shmid";
+    debug "called on $shmid" if ($Debug);
 
     # --- Serialize the data
     $data = freeze($var_ref);
     $length = length($data);
     $frag_size = (SHM_BUFSIZ) - (SHM_HEADSIZE) - (SHM_FOOTSIZE); # - Why don't bare words work here, Larry?
-    debug "$Package\:\:write_shm_variable: each fragment is $frag_size bytes max";
-    debug "$Package\:\:write_shm_variable: $var_ref has $length bytes of data";
+    debug "each fragment is $frag_size bytes max" if ($Debug);
+    debug "$var_ref has $length bytes of data" if ($Debug);
 
     # --- Fragment the data; first get the number of fragments, less one
     $frag_num = int($length / $frag_size);
@@ -577,10 +593,12 @@ sub write_shm_variable {
     # --- Create a template to split the data into the required number of fragments
     $template = "a$frag_size " x $frag_num;
     $template = "$template A$last_frag_length";
-    debug "$Package\:\:write_shm_variable: unpacking $shmid into $frag_num + 1 fragments";
-    debug "$Package\:\:write_shm_variable: using this template for unpacking: $template";
+    if ($Debug) {
+      debug "unpacking $shmid into $frag_num + 1 fragments";
+      debug "using this template for unpacking: $template";
+    }
     @frags = unpack($template, $data);
-    debug("$Package\:\:write_shm_variable: got " . @frags . " fragments");
+    debug("got " . @frags . " fragments") if ($Debug);
     
     # --- Now write the data, starting from fragment 0
     $frag_count = 0;
@@ -592,23 +610,27 @@ sub write_shm_variable {
     # --- Wait on both the read and write locks unless we have an exclusive lock
     unless ($Shm_Info{$$shmid}{'lock'}) {
 	$semid = $Shm_Info{$$shmid}{'sem_id'};
-	debug "$Package\:\:write_shm_variable: got sem_id $semid";
-	$opstring = pack('sss sss',
-			 SHM_RLOCKSEM, -1, 0,
-			 SHM_WLOCKSEM, -1, 0
+	debug "got sem_id $semid" if ($Debug);
+	$opstring = pack('sss sss sss sss',
+			 SHM_RLOCKSEM, 0, 0,
+			 SHM_WLOCKSEM, 0, 0,
+                         SHM_RLOCKSEM, 1, SEM_UNDO,
+                         SHM_WLOCKSEM, 1, SEM_UNDO 
 			 );
 	semop($semid, $opstring) or
-	    croak "$Package\:\:write_shm_variable: semop returned false";
+	    croak "$Package\:\:write_shm_variable: semop returned false: $!";
     }
 
     # --- Write each fragment in succession
     foreach $frag (@frags) {
-	debug "$Package\:\:write_shm_variable: writing fragment $frag_count to shm";
-	debug "$Package\:\:write_shm_variable: fragment $frag_count will reside at $frag_id";
+        if ($Debug) {
+	  debug "writing fragment $frag_count to shm";
+	  debug "fragment $frag_count will reside at $frag_id";
+        }
 
 	# --- Get the length of this fragment
 	$length  = length($frag);
-	debug "$Package\:\:write_shm_variable: fragment $frag_count is $length bytes long";
+	debug "fragment $frag_count is $length bytes long" if ($Debug);
 
 	# --- Write the header; if this is not the last fragment, the length is set
 	# --- to greater than a fragment data area size to indicate there is more data coming
@@ -622,8 +644,8 @@ sub write_shm_variable {
 
 	# --- Write the data for this fragment
 	shmwrite($frag_id, $frag, SHM_HEADSIZE, $length) or
-	    croak "$Package\:\:write_shm_variable: shmwrite returned false";
-	debug "$Package\:\:write_shm_variable: wrote $length bytes to $frag_id";
+	    croak "$Package\:\:write_shm_variable: shmwrite returned false: $!";
+	debug "wrote $length bytes to $frag_id" if ($Debug);
 
 	# --- See if we have to write another fragment, and therefore create another shmid
 	if ($frag_count < $#frags) {
@@ -631,32 +653,34 @@ sub write_shm_variable {
 	    # --- See if we already know what the ID is to be
 	    $next_frag_id = $Shm_Info{$$shmid}{'frag_id'}{$frag_count + 1};
 	    if (not defined $next_frag_id) {
-		debug "$Package\:\:write_shm_variable: getting next fragment id for fragment $frag_count";
+		debug "getting next fragment id for fragment $frag_count"
+                  if ($Debug);
 
 		# --- We have to create a new shared memory segment
 		$key = ($Shm_Info{$$shmid}{'key'} + $frag_count + 1);
 		$flags = $Shm_Info{$$shmid}{'flags'};
-		debug "$Package\:\:write_shm_variable: calling shmget($key, SHM_BUFSIZ, $flags)";
+		debug "calling shmget($key, SHM_BUFSIZ, $flags)" if ($Debug);
 		# --- Or IPC_CREATE and IPC_EXCL into flags to make sure we get a new segment
 		$flags = IPC_CREAT|$flags;
 		$flags = IPC_EXCL|$flags; # - To make sure don't step on anybody else's toes
-		$next_frag_id = shmget($key, SHM_BUFSIZ, $flags) or
-		    croak "$Package\:\:write_shm_variable: shmget returned false";
+		defined($next_frag_id = shmget($key, SHM_BUFSIZ, $flags)) or
+		  croak "$Package\:\:write_shm_variable: shmget returned undef: $!";
 
 		# --- Store the fragment ID for future use
 		$Shm_Info{$$shmid}{'frag_id'}{$frag_count + 1} = $next_frag_id;
 	    }
-	    debug "$Package\:\:write_shm_variable: got frag_id $next_frag_id for fragment following $frag_count";
+	    debug "got frag_id $next_frag_id for fragment following $frag_count"
+              if ($Debug);
 
 	    # --- Write the id of the next fragment as the footer
 	    write_shm_footer($frag_id, $next_frag_id);
 
 	} else {
 	    # --- There is no next fragment
-	    debug "$Package\:\:write_shm_variable: fragment $frag_count is last one";
+	    debug "fragment $frag_count is last one" if ($Debug);
 
 	    # --- Remove any previously used fragments from shared memory
-	    debug "$Package\:\:write_shm_variable: doing garbage collection on $$shmid";
+	    debug "doing garbage collection on $$shmid" if ($Debug);
 
 	    # --- Get the list of stale fragments
 	    @stale_fragments = grep(($_ > $frag_count), keys %{$Shm_Info{$$shmid}{'frag_id'}});
@@ -666,13 +690,13 @@ sub write_shm_variable {
 	    foreach $stale_fragment (@stale_fragments) {
 
 		# --- Get the shmid for this piece of garbage
-		debug "$Package\:\:write_shm_variable: fragment $stale_fragment no longer needed";
+		debug "fragment $stale_fragment no longer needed" if ($Debug);
 		$frag_id = $Shm_Info{$$shmid}{'frag_id'}{$stale_fragment};
 
 		# --- Remove from shared memory
 		$shmctl_return = shmctl($frag_id, IPC_RMID, $shmctl_arg);
 		defined $shmctl_return or
-		    croak "$Package\:\:write_shm_variable: shmctl returned undefined when removing $frag_id";
+		    croak "$Package\:\:write_shm_variable: shmctl returned undefined when removing $frag_id: $!";
 
 		# --- Remove from the local cache
 		delete $Shm_Info{$$shmid}{'frag_id'}{$stale_fragment};
@@ -687,11 +711,11 @@ sub write_shm_variable {
     # --- Unlock the variable unless we have an exclusive lock
     unless ($Shm_Info{$$shmid}{'lock'}) {
 	$opstring = pack('sss sss',
-			 SHM_RLOCKSEM, 1, 0,
-			 SHM_WLOCKSEM, 1, 0
+			 SHM_RLOCKSEM, -1, SEM_UNDO,
+			 SHM_WLOCKSEM, -1, SEM_UNDO 
 			 );
 	semop($semid, $opstring) or
-	    croak "$Package\:\:write_shm_variable: semop returned false";
+	    croak "$Package\:\:write_shm_variable: semop returned false: $!";
     }
     1;
 }
@@ -703,12 +727,12 @@ sub read_shm_header {
     # --- the length of the data
     my($shmid) = @_;
     my $shm_header = '';
-    debug "$Package\:\:read_shm_header called on $shmid";
+    debug "called on $shmid" if ($Debug);
 
     # --- Read the shm header
     shmread($shmid, $shm_header, 0, SHM_HEADSIZE) or
-	croak "$Package\:\:read_shm_header: shmread returned false";
-    debug "$Package\:\:read_shm_header: read $shm_header from $shmid";
+	croak "$Package\:\:read_shm_header: shmread returned false: $!";
+    debug "read $shm_header from $shmid" if ($Debug);
 
     # --- Unencode it
     unpack('L', $shm_header);
@@ -718,12 +742,12 @@ sub write_shm_header {
     # --- Writes the (minimal) shm header that we put into each shm segment
     # --- Returns true upon success, craps out if there's an error
     my($shmid, $length) = @_;
-    debug "$Package\:\:write_shm_header called on $shmid";
+    debug "called on $shmid" if ($Debug);
 
     # --- Write the header
     shmwrite($shmid, pack('L', $length), 0, SHM_HEADSIZE) or
-	croak "$Package\:\:write_shm_header: shmwrite returned false";
-    debug "$Package\:\:write_shm_header: wrote $length to $shmid";
+	croak "$Package\:\:write_shm_header: shmwrite returned false: $!";
+    debug "wrote $length to $shmid" if ($Debug);
     1;
 }
 
@@ -733,11 +757,11 @@ sub read_shm_footer {
     my($shmid) = @_;
     my $shm_footer = '';
     my $foot_offset = (SHM_BUFSIZ) - (SHM_FOOTSIZE);
-    debug "$Package\:\:read_shm_footer called on $shmid";
+    debug "called on $shmid" if ($Debug);
 
     # --- Do it
     shmread($shmid, $shm_footer, $foot_offset, SHM_FOOTSIZE) or
-	croak "$Package\:\:read_shm_footer return false";
+	croak "$Package\:\:read_shm_footer return false: $!";
 
     # --- Unencode it
     unpack('i', $shm_footer);
@@ -748,23 +772,23 @@ sub write_shm_footer {
     # --- data for this variable
     my($shmid, $shm_footer) = @_;
     my $foot_offset = (SHM_BUFSIZ) - (SHM_FOOTSIZE);
-    debug "$Package\:\:write_shm_footer called on $shmid, $shm_footer";
+    debug "called on $shmid, $shm_footer" if ($Debug);
 
     # --- Pack the data as necessary
     $shm_footer = pack('i', $shm_footer);
-    debug "$Package\:\:write_shm_footer: packed foot looks like $shm_footer";
+    debug "packed foot looks like $shm_footer" if ($Debug);
 
     # --- Do it
     shmwrite($shmid, $shm_footer, $foot_offset, SHM_FOOTSIZE) or
-	croak "$Package\:\:write_shm_footer: shmwrite returned false";
+	croak "$Package\:\:write_shm_footer: shmwrite returned false: $!";
 }
 
 sub debug {
     # --- Used for debugging
-    my(@complaints) = @_;
-    my($package, $line);
-    ($package, undef, $line) = caller;
-    warn "$$: $package: $line: ", @complaints if $Debug;
+    my($complaint) = join(' ', @_);
+    my($line, $sub);
+    (undef, undef, $line, $sub) = caller(1);
+    warn "$$: $sub [$line]: $complaint\n";
 }
 
 1;
@@ -1241,9 +1265,11 @@ keys(), values(), and each() without having to worry
 about somebody else clobbering a key in the middle of
 the loop.
 
-=head1 AUTHOR
+=head1 AUTHORS
 
 Benjamin Sugars <bsugars@canoe.ca>
+
+Maurice Aubrey <maurice@hevanet.com>
 
 =head1 NOTES
 
@@ -1387,9 +1413,9 @@ sub create_magic_tie {
     # --- Ties an implicitly created thingy
     my($variable, $ref_type, $thingy, $key) = @_;
     my($options,$anon_key, $anon_refs, $shmid);
-    debug "$Package\:\:create_magic_tie for a $ref_type called on $variable, $thingy";
+    debug "for a $ref_type called on $variable, $thingy" if ($Debug);
 
-    debug "$Package\:\:create_mage_tie: remembering the referenced thingy as $thingy";
+    debug "remembering the referenced thingy as $thingy" if ($Debug);
 
     # --- Get some glue for the upcoming tie() call
     if ($Shm_Info{$$variable}{'key'} != IPC_PRIVATE) {
@@ -1400,7 +1426,7 @@ sub create_magic_tie {
 	    $anon_key = $Shm_Info{$$variable}{'key'} - $anon_refs;
 	    $Shm_Info{$$variable}{'DATA'}{'internal'}{"$thingy"}{'key'} = $anon_key;
 	}
-	debug "$Package\:\:create_magic_tie: chose $anon_key as the glue for tie()";
+	debug "chose $anon_key as the glue for tie()" if ($Debug);
     } else {
 	$anon_key = IPC_PRIVATE;
 	$Shm_Info{$$variable}{'DATA'}{'internal'}{"$thingy"}{'key'} = $anon_key;
@@ -1432,7 +1458,7 @@ sub attach_magic_tie {
     my($thingy, $thingy_info);
     my($anon_key, $ref_type, $hash_key, $wanted_shmid, $wanted_semid);
     my($dummy, $thingy_ref, $arg, $shm_info);
-    debug "$Package\:\:attach_magic tie called on $variable $type";
+    debug "tie called on $variable $type" if ($Debug);
 
     # --- Loop through all possible attached structures
     while (($thingy, $thingy_info) = each %{$Shm_Info{$$variable}{'DATA'}{'internal'}}) {
@@ -1445,30 +1471,34 @@ sub attach_magic_tie {
 	$ref_type = $thingy_info->{'ref_type'}; # - What the referenced thingy is
 	$hash_key = $Shm_Info{$$variable}{'DATA'}{'internal'}{$thingy}{'hash_key'}; # - Where in our hash it is found
 	$wanted_shmid = $Shm_Info{$$variable}{'DATA'}{'internal'}{$thingy}{'shm_id'}; # - Where in shmem the thingy is
-	debug "$Package\:\:attach_magic_tie: data in $$variable wants to attach to a $ref_type at $anon_key";
-	debug "$Package\:\:attach_magic_tie: $thingy will live at $hash_key" if $type eq 'HASH';
-	debug "$Package\:\:attach_magic_tie: the thingy $$variable wants to attach to lives at $wanted_shmid";
+	debug "data in $$variable wants to attach to a $ref_type at $anon_key"
+          if ($Debug);
+	debug "$thingy will live at $hash_key" 
+          if (($type eq 'HASH') and ($Debug));
+	debug "the thingy $$variable wants to attach to lives at $wanted_shmid"
+          if ($Debug);
 
 	# --- Get the semaphore set associated with this variable
-	debug "$Package\:\:attach_magic_tie: getting semaphore set for $thingy";
-	debug "$Package\:\:attach_magic_tie: calling semget($anon_key, 3, $Shm_Info{$$variable}{'flags'})";
-	$wanted_semid = semget($anon_key, 3, $Shm_Info{$$variable}{'flags'}) or
-	    debug "$Package\:\:attach_magic_tie: semget returned false ($wanted_semid /$!)";
-	defined $wanted_semid or
-	    croak "$Package\:\:attach_magic_tie: couldn't attach $thingy to $variable";
-	debug "$Package\:\:attach_magic_tie: temporarily got a semid of $wanted_semid for $wanted_shmid";
+	debug "getting semaphore set for $thingy" if ($Debug);
+	debug "calling semget($anon_key, 3, $Shm_Info{$$variable}{'flags'})"
+          if ($Debug);
+	defined($wanted_semid = semget($anon_key, 3, $Shm_Info{$$variable}{'flags'})) or
+	    croak "$Package\:\:attach_magic_tie: semget returned undef ($wanted_semid/$!)";
+	debug "temporarily got a semid of $wanted_semid for $wanted_shmid"
+          if ($Debug);
 	$Shm_Info{$wanted_shmid}{'sem_id'} = $wanted_semid;
 
 	# --- Get the thingy we need to tie
 	$dummy = read_shm_variable(\$wanted_shmid);
 	$thingy_ref = $dummy->{'user'};
-	debug "$Package\:\:attach_magic_tie: found a $thingy_ref at $wanted_shmid";
+	debug "found a $thingy_ref at $wanted_shmid" if ($Debug);
 	ref($thingy_ref) eq $ref_type or
 	    croak "$Package\:\:attach_magic_tie: expected to find a $ref_type at $wanted_shmid but found a ", ref($thingy_ref), "instead";
-	debug "$Package\:\:attach_magic_tie: $thingy_ref is indded a $ref_type";
+	debug "$thingy_ref is indded a $ref_type" if ($Debug);
 
 	# --- Tie the thingy
-	debug "$Package\:\:attach_magic_tie: about to tie $thingy to $anon_key";
+	debug "$Package\:\:attach_magic_tie: about to tie $thingy to $anon_key"
+          if ($Debug);
 	if ($ref_type eq 'HASH') {
 	    tie(%$thingy_ref, 'IPC::Shareable', $anon_key, $Shm_Info{$$variable}{'options'}) or
 		croak "$Package\:\:attach_magic_tie: couldn't attach to thingy referenced by $variable";
@@ -1479,10 +1509,10 @@ sub attach_magic_tie {
 
 	# --- Now assign to the right place
 	if ($type eq 'HASH') {
-	    debug "$Package\:\:attach_magic_tie: assigning $thingy_ref to $$variable/$hash_key";
+	    debug "assigning $thingy_ref to $$variable/$hash_key" if ($Debug);
 	    $Shm_Info{$$variable}{'DATA'}{'user'}{$hash_key} = $thingy_ref;
 	} elsif ($type eq 'SCALAR') {
-	    debug "$Package\:\:attach_magic_tie: assigning \\$thingy_ref to $$variable";
+	    debug "assigning \\$thingy_ref to $$variable" if ($Debug);
 	    $Shm_Info{$$variable}{'DATA'}{'user'} = \$thingy_ref;
 	}
 	
@@ -1500,32 +1530,34 @@ sub shlock {
     my($variable) = @_;
     my($semid, $opstring, $arg);
     $arg = 0;
-    debug "$Package\:\:shlock called on $variable";
+    debug "called on $variable" if ($Debug);
 
     # --- Don't lock it again if we already have done so
     return 1 if $Shm_Info{$$variable}{'lock'};
 
     # --- Get the semaphore ID
     $semid = $Shm_Info{$$variable}{'sem_id'};
-    debug "$Package\:\:shlock: got sem_id $semid";
+    debug "$Package\:\:shlock: got sem_id $semid" if ($Debug);
 
     # --- Debugging
-    _show_sems($semid) if $Debug;
+    _show_sems($semid) if ($Debug);
 
     # --- Define the operation
-    $opstring = pack('sss sss',
-		     SHM_RLOCKSEM, -1, 0,
-		     SHM_WLOCKSEM, -1, 0
+    $opstring = pack('sss sss sss sss',
+		     SHM_RLOCKSEM, 0, 0,
+		     SHM_WLOCKSEM, 0, 0,
+                     SHM_RLOCKSEM, 1, SEM_UNDO,
+                     SHM_WLOCKSEM, 1, SEM_UNDO 
 		     );
     # --- Do it
     semop($semid, $opstring) or
-	croak "$Package\:\:shlock: semop returned false";
+	croak "$Package\:\:shlock: semop returned false: $!";
 
     # --- Set the flag so that this process can still use the variable
     $Shm_Info{$$variable}{'lock'} = 'true';
 
     # --- More debugging
-    _show_sems($semid) if $Debug;
+    _show_sems($semid) if ($Debug);
 
     1;
 }
@@ -1534,22 +1566,22 @@ sub shunlock {
     my($variable) = @_;
     my($semid, $opstring, $arg);
     $arg = 0;
-    debug "$Package\:\:shunlock called on $variable";
+    debug "called on $variable" if ($Debug);
 
     # --- Don't unlock it again if we don't have a lock on it
     return 1 unless $Shm_Info{$$variable}{'lock'};
 
     # --- Get the semaphore ID
     $semid = $Shm_Info{$$variable}{'sem_id'};
-    debug "$Package\:\:shunlock: got sem_id $semid";
+    debug "$Package\:\:shunlock: got sem_id $semid" if ($Debug);
 
     # --- Debugging
-    _show_sems ($semid)if $Debug;
+    _show_sems ($semid) if ($Debug);
 
     # --- Define the operation
     $opstring = pack('sss sss',
-		     SHM_RLOCKSEM, 1, 0,
-		     SHM_WLOCKSEM, 1, 0
+		     SHM_RLOCKSEM, -1, SEM_UNDO,
+		     SHM_WLOCKSEM, -1, SEM_UNDO 
 		     );
 
     # --- Remove the lock flag for this process
@@ -1557,10 +1589,10 @@ sub shunlock {
 
     # --- Do it
     semop($semid, $opstring) or
-	croak "$Package\:\:shunlock: semop returned false";
+	croak "$Package\:\:shunlock: semop returned false: $!";
 
     # --- More debugging
-    _show_sems($semid) if $Debug;
+    _show_sems($semid) if ($Debug);
 
     1;
 }
@@ -1576,14 +1608,14 @@ sub _show_sems {
     my($semid) = @_;
     my($read_lock, $write_lock, $arg);
     $arg = 0;
-    debug "$Package\:\:_show_sems: semid is $semid";
+    debug "$Package\:\:_show_sems: semid is $semid" if ($Debug);
 
     $read_lock = semctl($semid, SHM_RLOCKSEM, GETVAL, $arg) or
-	croak "$Package\:\:_show_sems: semctl returned false";
-    debug "$Package\:\:_show_sems: read lock is $read_lock";
+	croak "$Package\:\:_show_sems: semctl returned false: $!";
+    debug "$Package\:\:_show_sems: read lock is $read_lock" if ($Debug);
     $write_lock = semctl($semid, SHM_WLOCKSEM, GETVAL, $arg) or
-	croak "$Package\:\:_show_sems: semctl returned false";
-    debug "$Package\:\:_show_sems: write lock is $write_lock";
+	croak "$Package\:\:_show_sems: semctl returned false: $!";
+    debug "$Package\:\:_show_sems: write lock is $write_lock" if ($Debug);
 }
 
 # --------------------------------------------------------------------------------
@@ -1593,7 +1625,7 @@ sub TIEHASH {
     # --- Constructor
     my($class, @arguments) = @_;
     my($shm_hash, $shmid, $shm_info);
-    debug "$Package\:\:TIEHASH called on $class, @arguments";
+    debug "called on $class, @arguments" if ($Debug);
 
     # --- Parse arguments and get the shmid
     $shmid = tie_to_shm('HASH', @arguments);
@@ -1610,14 +1642,15 @@ sub FIRSTKEY {
     my($shm_hash) = @_;
     my($first_key);
     # --- Called when the user begins an iteration via each() or keys().
-    debug "$Package\:\:FIRSTKEY called on $shm_hash ($$shm_hash)";
+    debug "called on $shm_hash ($$shm_hash)" if ($Debug);
 
     # --- Make sure that %Shm_Info is up-to-date
     FETCH($shm_hash);
 
     # --- Now the $hash_ref obtained on the next line should be (reasonably) up-to-date
     $first_key = scalar each %{$Shm_Info{$$shm_hash}{'DATA'}{'user'}};
-    debug "$Package\:\:FIRSTKEY: \$first_key is $first_key" if defined $first_key;
+    debug "$Package\:\:FIRSTKEY: \$first_key is $first_key" 
+      if ((defined $first_key) and ($Debug));
 
     # --- Set the magical token indicating an iteration has begun, but
     # --- only if there's something in the hash
@@ -1631,7 +1664,7 @@ sub NEXTKEY {
     my($shm_hash) = @_;
     my($key);
     # --- Called during the middle of an iteration via each() or keys().
-    debug "$Package\:\:NEXTKEY called on $shm_hash";
+    debug "called on $shm_hash" if ($Debug);
 
     # --- Get the next key from our local cache
     $key = each %{$Shm_Info{$$shm_hash}{'DATA'}{'user'}};
@@ -1639,7 +1672,7 @@ sub NEXTKEY {
     # --- Check to see if we're at the end of the iteration; if so,
     # --- we save our cached copy for the world to see.
     if (not defined $key) {
-	debug "$Package\:\:NEXTKEY: end of iteration detected";
+	debug "$Package\:\:NEXTKEY: end of iteration detected" if ($Debug);
 	delete $Shm_Info{$$shm_hash}{'hash_iterating'};
 	STORE($shm_hash);
     }
@@ -1651,14 +1684,15 @@ sub NEXTKEY {
 sub DELETE {
     my($shm_hash, $key) = @_;
     my $value;
-    debug "$Package\:\:DELETE called on $shm_hash with $key";
+    debug "called on $shm_hash with $key" if ($Debug);
 
     # --- Make sure that Shm_Info is up-to-date
     FETCH($shm_hash);
 
     # --- Delete the unwanted key
     $value = delete $Shm_Info{$$shm_hash}{'DATA'}{'user'}{$key};
-    debug "$Package\:\:DELETE: removed '$key' => '$value' from $shm_hash";
+    debug "$Package\:\:DELETE: removed '$key' => '$value' from $shm_hash"
+      if ($Debug);
 
     # --- Store the new hash
     STORE($shm_hash);
@@ -1681,7 +1715,7 @@ sub EXISTS {
 sub CLEAR {
     # --- Wipes out the entire contents of the hash
     my($shm_hash) = @_;
-    debug "$Package\:\:CLEAR called on $shm_hash";
+    debug "called on $shm_hash" if ($Debug);
 
     # --- Store an empty hash locally
     $Shm_Info{$$shm_hash}{'DATA'}{'user'} = {};
@@ -1699,7 +1733,7 @@ sub TIESCALAR {
     # --- Constructor
     my($class, @arguments) = @_;
     my($shm_scalar, $shmid);
-    debug "$Package\:\:TIESCALAR called on $class, @arguments";
+    debug "called on $class, @arguments" if ($Debug);
 
     # --- Parse arguments and get the shmid
     $shmid = tie_to_shm('SCALAR', @arguments);

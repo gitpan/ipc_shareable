@@ -461,8 +461,10 @@ INTERNALS
     via keys(), values(), and each() without having to worry about
     somebody else clobbering a key in the middle of the loop.
 
-AUTHOR
+AUTHORS
     Benjamin Sugars <bsugars@canoe.ca>
+
+    Maurice Aubrey <maurice@hevanet.com>
 
 NOTES
   Footnotes from the above sections
