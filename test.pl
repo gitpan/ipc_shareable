@@ -8,7 +8,7 @@ BEGIN {
 	exit;
     }
 $SIG{INT} = \&catch_int;
-$| = 1; print "1..16\n";
+$| = 1; print "1..14\n";
 }
 END {print "not ok 1\n" unless $loaded;}
 use IPC::Shareable;
@@ -29,6 +29,7 @@ foreach $name (split(' ', $Config{sig_name})) {
     $signame[$i] = $name;
     $i++;
 }
+
 # --- Tie a scalar variable
 $scalar = 'bar';
 $ok = 1;
@@ -99,7 +100,6 @@ for (keys %check) {
 print $ok ? "ok $number\n" : "not ok $number\n";
 untie $scalar;
 
-
 # --- Now try some real IPC
 $ok = 1;
 ++$number;
@@ -109,7 +109,7 @@ defined $pid or die $!;
 if ($pid == 0) {
     # --- Child
     sleep 3;
-    tie($scalar, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
+    tie($scalar, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'no' })
 	or undef $ok;
     # --- Retrieve the value
     $scalar eq 'bar' or
@@ -138,7 +138,7 @@ if ($pid == 0) {
 }
 untie $scalar;
 
-# --- Test fragmentation
+# --- Fragmentation
 $ok = 1;
 ++$number;
 $pid = fork;
@@ -151,13 +151,13 @@ $shm_bufsiz = &IPC::Shareable::SHM_BUFSIZ;
 if ($pid == 0) {
     # --- Child
     sleep; # - To ensure parent process creates the binding first
-    tie($long_scalar, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
+    tie($long_scalar, IPC::Shareable, 'zata', { 'create' => 'yes', 'destroy' => 'no' })
 	or die "child process can't tie \$long_scalar";
     $long_scalar = 'foo' x ($shm_bufsiz * 3); # - Lots of data
     exit;
 } else {
     # --- Parent
-    tie($long_scalar, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
+    tie($long_scalar, IPC::Shareable, 'zata', { 'create' => 'yes', 'destroy' => 'yes' })
 	or die "parent process can't tie \$long_scalar";
     sleep 2; # - Makes sure the following alarm doesn't ring to soon
     kill $signo{ALRM}, $pid; # - Wake up the child process
@@ -176,7 +176,7 @@ defined $pid or die $|;
 if ($pid == 0) {
     # --- Child
     sleep; # - To ensure parent process creates the binding first
-    tie($scalar, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
+    tie($scalar, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'no' })
 	or die "child process can't tie \$scalar";
     for $i (0 .. 99) {
   	(tied $scalar)->shlock;
@@ -203,44 +203,42 @@ if ($pid == 0) {
     untie $scalar;
 }
 
-# --- Test magical construction of references
+# --- Test magical tying of referenced thingies
 $ok = 1;
 ++$number;
 $pid = fork;
-defined $pid or die $|;
+defined $pid or die $!;
 if ($pid == 0) {
     # --- Child
-    sleep; # - To ensure parent process creates the binding first
-    tie(%hash, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
-	or die "child process can't tie \%hash";
-    ++$number; # - Parent does one test
-    ($hash{'foo'}{'bar'} eq 'xyzzy')
+    sleep 3;
+    tie($hash_ref, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'no' })
 	or undef $ok;
-    print $ok ? "ok $number\n" : "not ok $number\n";
-    ++$number;
-    $hash{'foo'}{'bar'} = 'blurp';
-    ($hash{'foo'}{'bar'} eq 'blurp')
-	or undef $ok;
+    # --- Assign some stuff.  These operations are completely non-atomic, so we
+    # --- need to lock
+    (tied $hash_ref)->shlock;
+    $hash_ref->{'blip'}{'blarp'} = 'blurp';
+    $hash_ref->{'flip'}{'flop'} = 'flurp';
+    (tied $hash_ref)->shunlock;
+    $hash_ref->{'blip'}{'blarp'} eq 'blurp' or
+	undef $ok;
+    $hash_ref->{'flip'}{'flop'} eq 'flurp' or
+	undef $ok;
     print $ok ? "ok $number\n" : "not ok $number\n";
     exit;
 } else {
     # --- Parent
-    tie(%hash, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
-	or die "parent process can't tie \%hash";
-    sleep 2; # - Makes sure the following alarm doesn't ring to soon
-    $hash{'foo'}{'bar'} = 'xyzzy';
-    ($hash{'foo'}{'bar'} eq 'xyzzy')
+    tie($hash_ref, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
 	or undef $ok;
-    print $ok ? "ok $number\n" : "not ok $number\n";
-    ++$number;
-    kill $signo{ALRM}, $pid; # - Wake up the child process
+    $hash_ref = {};
     wait;
-    $number += 2; # - Child does two tests
-    $hash{'foo'}{'bar'} eq 'blurp'
-	or undef $ok;
+    $hash_ref->{'blip'}{'blarp'} eq 'blurp' or
+	undef $ok;
+    $hash_ref->{'flip'}{'flop'} eq 'flurp' or
+	undef $ok;
+    ++$number; # - Child performed a test
     print $ok ? "ok $number\n" : "not ok $number\n";
-    untie %hash;
+    untie $hash_ref;
 }
 
-# --- Other tests to be added soon
+# --- Done!
 exit;

@@ -1,9 +1,11 @@
-Changes
+CHANGES
 COPYING
+CREDITS
 DISCLAIMER
 MANIFEST
 Makefile.PL
 README
 Shareable.pm
 Shareable.xs
+TO_DO
 test.pl

@@ -17,6 +17,13 @@
 	<LI><A HREF="#DESCRIPTION">DESCRIPTION</A>
 	<LI><A HREF="#OPTIONS">OPTIONS</A>
 	<LI><A HREF="#LOCKING">LOCKING</A>
+	<LI><A HREF="#REFERENCES">REFERENCES</A>
+	<UL>
+
+		<LI><A HREF="#The_Thingy_Referenced_Is_Initial">The Thingy Referenced Is Initially False</A>
+		<LI><A HREF="#The_Thingy_Referenced_Is_Initial">The Thingy Referenced Is Initially True</A>
+	</UL>
+
 	<LI><A HREF="#EXAMPLES">EXAMPLES</A>
 	<LI><A HREF="#RETURN_VALUES">RETURN VALUES</A>
 	<LI><A HREF="#INTERNALS">INTERNALS</A>
@@ -79,7 +86,7 @@ easy to share the contents of that variable with other Perl processes.
 Currently either scalars or hashes can be tied; tying of arrays remains a
 work in progress. However, the variable being tied may contain arbitrarily
 complex data structures - including references to arrays, hashes of hashes,
-etc.
+etc. See <A HREF="#REFERENCES">REFERENCES</A> below for more information.
 
 
 <P>
@@ -147,7 +154,8 @@ is equivalent to
 
 <P>
 
-<PRE>        tie($variable, IPC::Shareable, { 'key' =&gt; 'data', ... });
+<PRE>        tie($variable, IPC::Shareable,
+            { 'key' =&gt; 'data', ... });
 </PRE>
 
 <P>
@@ -330,6 +338,159 @@ yourself aware of; these are discussed in <A HREF="#NOTES">NOTES</A>.
 
 <P>
 <HR>
+<H1><A NAME="REFERENCES">REFERENCES
+
+</A></H1>
+If a variable <CODE>tie()d</CODE> to Shareable contains references,
+Shareable acts in different ways depending upon the initial state of the
+thingy being referenced.
+
+
+<P>
+
+<P>
+<HR>
+<H2><A NAME="The_Thingy_Referenced_Is_Initial">The Thingy Referenced Is Initially False
+
+</A></H2>
+If Shareable encounters in a <CODE>tie()d</CODE> variable a reference to an
+empty hash or a scalar with a false value, Shareable will attempt to
+<CODE>tie()</CODE> the hash or scalar being referenced. If a reference is
+to an empty array, Shareable defaults to its other behaviour described
+below since Shareable cannot <CODE>tie()</CODE> arrays.
+
+
+<P>
+
+References to empty hashes can occur whenever a <CODE>tie()d</CODE>
+variable is cast in a context that forces references to ``spring into
+existence''. Consider, for instance, the following assignment to a
+<CODE>tie()d</CODE> %hash:
+
+
+<P>
+
+<PRE>    $hash{'foo'}{'bar'} = 'xyzzy';
+</PRE>
+
+<P>
+
+This statement assigns assigns to $hash{'foo'} a reference to an anonymous
+hash. In the anonymous hash it assigns to the key 'bar' the value 'xyzzy'.
+Since <CODE>%hash</CODE> is <CODE>tie()d,</CODE> the assignment triggers
+Shareable, but when Shareable is called, the anonymous hash is still empty.
+Shareable then immediately <CODE>tie()s</CODE> the anonymous hash so that
+when the assignment { 'bar' = 'xyzzy' } is made, Shareable can catch it.
+
+
+<P>
+
+One consequence of this behaviour is a statement like
+
+
+<P>
+
+<PRE>    $scalar = {};
+</PRE>
+
+<P>
+
+will, for a <CODE>tie()d</CODE> $scalar, Shareable to <CODE>tie()</CODE>
+the anonymous hash. Consider this a supported bug. It does, however mean
+that statements like
+
+
+<P>
+
+<PRE>    $scalar-&gt;{'foo'} = 'bar';
+</PRE>
+
+<P>
+
+should work as expected.
+
+
+<P>
+
+Be warned, however, that each variable <CODE>tie()d</CODE> to Shareable
+requires (at least) one shared memory segment and one set of three
+semaphores. If you use this feature too liberally, you can find yourself
+running out of semaphores quickly. If that happens to you, consider
+resorting to Shareable other behaviour described in the following section.
+
+
+<P>
+
+Another potential problem at the time of writing with using this behaviour
+is that locking using <CODE>shlock()</CODE> and <CODE>shunlock()</CODE> is
+unreliable. This is because a data structure spans more than one
+<CODE>tie()d</CODE> variable. It is advisable to implement your own locking
+mechanism if you plan on using this behaviour of Shareable.
+
+
+<P>
+
+<P>
+<HR>
+<H2><A NAME="The_Thingy_Referenced_Is_Initial">The Thingy Referenced Is Initially True
+
+</A></H2>
+If Shareable encounters in a <CODE>tie()d</CODE> variable a reference to a
+hash with any key/value pairs, a reference to a true scalar, or a reference
+to any array, the contents of the referenced thingy are slurped into the
+same shared memory segment as the original <CODE>tie()d</CODE> variable.
+What that means is that a statement like
+
+
+<P>
+
+<PRE>    $scalar = [ 0 .. 9 ];
+</PRE>
+
+<P>
+
+makes the contents of the anonymous array referenced by a
+<CODE>tie()d</CODE> <CODE>$scalar</CODE> visible to other processes.
+
+
+<P>
+
+The good side of this behaviour is that a data structure can be arbitrarily
+complex and still only require one set of three semaphores. The downside
+becomes evident when you try to modify the contents of such a referenced
+thingy, either in the original process or elsewhere. A statement like
+
+
+<P>
+
+<PRE>    push(@$scalar, 10, 11, 12);
+</PRE>
+
+<P>
+
+modifies only the untied anonymous array referenced by <CODE>$scalar</CODE>
+and not the <CODE>tie()d</CODE> <CODE>$scalar</CODE> itself. Subsequently,
+the change to the anonymous array would be visible only in the process
+making this statement.
+
+
+<P>
+
+A workaround is to remember which variable is really <CODE>tie()d</CODE>
+and to make sure you assign into that variable every time you change a
+thingy that it references. An alternative to the above statement that works
+is
+
+
+<P>
+
+<PRE>    $scalar = [ (@$scalar, 10, 11, 12) ];
+</PRE>
+
+<P>
+
+<P>
+<HR>
 <H1><A NAME="EXAMPLES">EXAMPLES
 
 </A></H1>
@@ -457,7 +618,7 @@ reference to perform a lookup in
 
 <P>
 
-<PRE>        # - The id of an enchanted variable
+<PRE>        # - The ID of an enchanted variable
         $id =&gt; {
 </PRE>
 
@@ -465,6 +626,12 @@ reference to perform a lookup in
 
 <PRE>            # -  A literal indicating the variable type
             'type' =&gt; 'SCALAR' || 'HASH',
+</PRE>
+
+<P>
+
+<PRE>            # - The I&lt;$glue&gt; used when tie() was called
+            'key' =&gt; $glue,
 </PRE>
 
 <P>
@@ -485,12 +652,6 @@ reference to perform a lookup in
 
 <P>
 
-<PRE>            # - The I&lt;$glue&gt; used when tie() was called
-            'key' =&gt; $glue,
-</PRE>
-
-<P>
-
 <PRE>            # - The options passed when tie() was called
             'options' =&gt; { %options },
 </PRE>
@@ -506,39 +667,84 @@ reference to perform a lookup in
 <PRE>            # - Destroy shm segements on exit?
             'destroy' =&gt; $destroy,
                     ;
-            # - Data cache
+            # - The version number of the cached data
+            'version' =&gt; $version,
+</PRE>
+
+<P>
+
+<PRE>            # - A flag that indicates if this process
+            # - has a lock on this variable
+            'lock' =&gt; $lock_flag,
+</PRE>
+
+<P>
+
+<PRE>            # - A flag that indicates whether an
+            # - iteration of this variable is in
+            # - progress and we should use the local
+            # - cache only until the iteration is over.
+            # - Meaningless for scalars.
+            'hash_iterating' =&gt; $iteration_flag,
+</PRE>
+
+<P>
+
+<PRE>            # - Data cache; data will be retrieved from
+            # - here when this process's version is the
+            # - same as the public version, or when we
+            # - have a hash in the middle of some kind
+            # - of iteration
             'DATA' =&gt; {
-                # - User data
+                # - User data; where the real
+                # - information is stored
                 'user' =&gt; \$data || \%data,
-                # - Internal data used to manage magically
-                # - created tie()d variables
+                # - Internal data used by Shareable to
+                # - attach to any thingies referenced
+                # - by this variable; see REFERENCES
+                # - above
                 'internal =&gt; {
-                    # - Identifier of associated data
+                    # - Identifier of a thingy attached
+                    # - to this variable
                     $string_1 =&gt; {
-                        'key' =&gt; $key, # - Used when tie()ing
-                        'type' =&gt; $type, # - Type of thingy to tie to
-                        'hash_key' =&gt; $hash_key, # - Where to store info
+                        # - The shared memory id of the
+                        # - attached thingy
+                        'shm_id' =&gt; $attached_shmid,
+                        # - The $glue used when tie()ing
+                        # - to this thingy
+                        'key' =&gt; $glue,
+                        # - Type of thingy to attach to
+                        'ref_type' =&gt; $type,
+                        # - Where to store the reference
+                        # - to this thingy
+                        'hash_key' =&gt; $hash_key,
                     },
                     $string_2 =&gt; {
-                        ...
+                        ... # - Another set of keys like
+                            # - $string_1
                     },
-                    ...
+                    ... # - Additional $string_n's if
+                        # - need be.
                 },
             },
 </PRE>
 
 <P>
 
-<PRE>            # - The version number of the cached data
-            'version' =&gt; $version,
+<PRE>            # - List of associated data structures, and 
+            # - flags that indicate if this process has
+            # - successfully attached to them
+            'attached' =&gt; {
+                $string_1 =&gt; $attached_flag1,
+                $string_2 =&gt; $attached_flag2,
+            },
 </PRE>
 
 <P>
 
-<PRE>            # - A flag that indicates if this process has a lock
-            'lock' =&gt; $flag,
+<PRE>            
             },
-       ...
+       ... # - IDs of additional tie()d variables
    );
 </PRE>
 
@@ -552,14 +758,14 @@ available. When retrieving data for a <CODE>tie()d</CODE> variables, the
 values of these semaphores are examined to see if another process has
 created a more recent version than the cached version. If a more recent
 version is available, it will be retrieved from shared memory and used. If
-no more recent version has been created, the cached version is used[5].
+no more recent version has been created, the cached version is used.
 
 
 <P>
 
 Also stored in the <EM>'DATA'</EM> field is a structure that identifies any ``magically created''
 <CODE>tie()d</CODE> variables associated with this variable. These
-variables are created by assignments like the following[6]:
+variables are created by assignments like the following:
 
 
 <P>
@@ -569,20 +775,7 @@ variables are created by assignments like the following[6]:
 
 <P>
 
-Although it may not look like it, this assignment actually stores data in
-*two* hashes: %hash, and an anonymous hash referenced by $hash{'foo'} that
-springs into existence at run time. IPC::Shareable handles this by secretly
-<CODE>tie()ing</CODE> the anonymous hash. When another process
-<CODE>tie()s</CODE> to a shared variable, the IPC::Shareable will loop
-through all of the keys contained in %{$Shm_Info{$id}{'DATA'}{'internal'}}
-and ties to all of data structures therein.
-
-
-<P>
-
-Versions of IPC::Shareable prior to 0.20 do not handle such implicit
-creation of anonymous hashes properly. Versions prior to 0.25 do not handle
-modification of implicitly created hashes properly.
+See <A HREF="#REFERENCES">REFERENCES</A> for a complete explanation.
 
 
 <P>
@@ -592,6 +785,17 @@ memory of a constant size SHM_BUFSIZ, where SHM_BUFSIZ is defined in this
 module. If the amount of (serialized) data exceeds this value, it will be
 fragmented into multiple segments during a write operation and reassembled
 during a read operation.
+
+
+<P>
+
+Lastly, if notice that if you <CODE>tie()</CODE> a hash and begin iterating
+over it, you will get data from and write to your local cache until
+Shareable thinks you've reached the end of the iteration. At this point
+Shareable writes out the entire contents of your hash to shared memory.
+This is done so you can safely iterate via <CODE>keys(),</CODE>
+<CODE>values(),</CODE> and <CODE>each()</CODE> without having to worry
+about somebody else clobbering a key in the middle of the loop.
 
 
 <P>
@@ -651,7 +855,8 @@ remain in shared memory. If you're cautious, you might try
         exit;
     }
     ...
-    tie($variable, IPC::Shareable, 'data', { 'destroy' =&gt; 'Yes!' });
+    tie($variable, IPC::Shareable, 'data',
+        { 'destroy' =&gt; 'Yes!' });
 </PRE>
 
 <P>
@@ -673,50 +878,6 @@ segment used to store the variable's data.
 
 <P>
 
-<LI><STRONG><A NAME="item_">
-
-</A></STRONG>
-The exception to this is when the FIRSTKEY and NEXTKEY methods are
-implemented, presumably because of a call to <CODE>each()</CODE> or
-<CODE>keys().</CODE> In this case, the cached value is ALWAYS used until
-the end of the cached hash has been reached. Then the cache is refreshed
-with the public version (if the public version is more recent).
-
-
-<P>
-
-The reason for this is that if a (changed) public version is retrieved in
-the middle of a loop implemented via <CODE>each()</CODE> or
-<CODE>keys(),</CODE> chaos could result if another process added or removed
-a key from the hash being iterated over. To guard against this, the cached
-version is always used during such cases.
-
-
-<P>
-
-<LI><STRONG><A NAME="item_">
-
-</A></STRONG>
-The way IPC::Shareable checks if this is necessary or not is by examining
-the contents of the thingy being referenced. If the thingy is emtpy, it
-assumes an implicit reference is being created and it goes ahead and ties
-the thingy. Otherwise Shareable does not tie the thingy. This means that a
-statement like
-
-
-<P>
-
-<PRE>    $hash{'foo'} = {}
-</PRE>
-
-<P>
-
-Would actually cause IPC::Shareable to tie the emtpy anonymous array,
-although in this case it really does not need to. This is probably a bug.
-
-
-<P>
-
 </OL>
 <P>
 <HR>
@@ -734,6 +895,16 @@ untrapped signal is received while a process holds an exclusive lock,
 DESTROY will not be called and the lock may be maintained even though the
 process has exited. If this scares you, you might be better off
 implementing your own locking methods.
+
+
+<P>
+
+<DT><STRONG>o
+
+</A></STRONG><DD>
+The bulk of Shareable's behaviour when dealing with references relies on
+undocumented (and possibly unsupported) features of perl. Changes to perl
+in the future could break Shareable.
 
 
 <P>
@@ -819,8 +990,10 @@ Bortzmeyer <A
 HREF="MAILTO:<bortzmeyer@pasteur.fr>,"><bortzmeyer@pasteur.fr>,</A> Michael
 Stevens <A
 HREF="MAILTO:<michael@malkav.imaginet.co.uk>,"><michael@malkav.imaginet.co.uk>,</A>
-and Richard Neal <A
-HREF="MAILTO:<richard@imaginet.co.uk>"><richard@imaginet.co.uk></A>
+Richard Neal <A
+HREF="MAILTO:<richard@imaginet.co.uk>,"><richard@imaginet.co.uk>,</A> and
+Jason Stevens <A
+HREF="MAILTO:<jstevens@chron.com>."><jstevens@chron.com>.</A>
 
 
 <P>
@@ -830,41 +1003,8 @@ HREF="MAILTO:<richard@imaginet.co.uk>"><richard@imaginet.co.uk></A>
 <H1><A NAME="BUGS">BUGS
 
 </A></H1>
-Certainly; this is alpha software.
-
-
-<P>
-
-The first bug is that I do not know what all the bugs are. If you discover
-an anomaly, send me an email at <A
-HREF="MAILTO:bsugars@canoe.ca.">bsugars@canoe.ca.</A>
-
-
-<P>
-
-Variables that have been declared local with <CODE>my()</CODE> and
-subsequently <CODE>tie()d</CODE> can act in a bizarre fashion if you store
-references in them. You can try not not using <CODE>my()</CODE> in these
-cases, or go through extra pain when dereferencing them, like this:
-
-
-<P>
-
-<PRE>    #!/usr/bin/perl
-    use IPC::Shareable;
-    my $scalar;
-    tie($scalar, IPC::Shareable, { 'destroy' =&gt; 'yes' });
-    $scalar = [ 0 .. 9 ];
-    @array = @$scalar;
-    for (0 .. 9) {
-        print &quot;$array[$_]\n&quot;; # $$scalar won't work after 'my $scalar;'
-    }
-</PRE>
-
-<P>
-
-I suspect the reason for this is highly mystical and requires a wizard to
-explain.
+Certainly; this is alpha software. When you discover an anomaly, send me an
+email at <A HREF="MAILTO:bsugars@canoe.ca.">bsugars@canoe.ca.</A>
 
 
 <P>

@@ -5,11 +5,11 @@ incorporated into a common codebase for everyone to benefit from
 
 - tying of arrays
 
-- rewriting the core of Shareable in C to gain speed
-and memory efficiency
+- rewriting the core of Shareable in C to gain speed and memory
+efficiency
 
-- perhaps add news ways to share data in addition to shared memory
- so that the module becomes portable
+- perhaps add news ways to share data in addition to shared memory so
+that the module becomes portable
 
 - have Shareable print proper error messages when system calls fail
 
@@ -17,5 +17,6 @@ and memory efficiency
 their use will automatically invoke locking and unlocking of a tie()d
 variable?
 
--Ben Sugars <bsugars@canoe.ca>
-October 8, 1997
+--
+Ben Sugars <bsugars@canoe.ca>
+October 23, 1997.

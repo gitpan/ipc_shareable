@@ -1,0 +1,53 @@
+Revision history for Perl extension IPC::Shareable.
+
+0.01  Wed Jul 30 09:00:53 1997
+        - original version; created by h2xs 1.18.
+
+0.05  Wed Jul 30 15:02:31 EDT 1997
+        - scalars can now be tied; Ben Sugars.
+
+0.10  Fri Aug  1 13:32:52 EDT 1997
+        - can now tie both scalars and hashes of arbitrary length;
+          Ben Sugars.
+
+0.11  Wed Aug  6 10:14:49 EDT 1997
+        - initial implementation of semaphores for versioning and
+          caching; Ben Sugars.
+
+0.12  Thu Aug  7 14:47:42 EDT 1997
+        - various bug fixes; Ben Sugars.
+
+0.15  Fri Aug  8 15:45:29 EDT 1997
+        - implemented locking using semaphores; Ben Sugars.
+
+0.16  Mon Aug 11 16:10:54 EDT 1997
+        - new shared memory segments now initialized with null
+          values; Ben Sugars.
+
+0.17  Wed Aug 27 15:57:11 EDT 1997
+        - fixed some bugs in &parse_argument_hash; Ben Sugars.
+
+0.18  Thu Aug 28 09:12:30 EDT 1997
+        - fixed garbage collection bug; Ben Sugars.  Thanks to
+        Michael Stevens <michael@imaginet.co.uk> for the patch.
+
+0.20  Thu Aug 28 15:13:46 EDT 1997
+        - added ability to magically create ties to implicitly
+        referenced thingys; Ben Sugars.
+
+0.25  Tue Oct  7 14:41:49 EDT 1997
+        - added more checking of sem*() and shm*() return values;
+        Michael Stevens and Ben Sugars.
+        - added shlock and shunlock; Ben Sugars.
+        - fixed bug that would cause modifications of magically
+        referenced thingys to fail.  Thanks to Maurice Aubrey
+
+0.26  Mon Oct 20 10:06:43 EDT 1997
+        - fixed bug regarding assigning a reference to an empty
+        hash to a tied variable.  Thanks to Jason Stevens.
+
+0.28  Wed Oct 22 14:59:08 EDT 1997
+        - cleaned up the way thingys are magically tied; Ben Sugars.
+        - moved many subroutines so that they are auto-loaded; Ben
+        Sugars.
+        - updated man page; Ben Sugars.

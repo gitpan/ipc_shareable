@@ -48,16 +48,21 @@ Notes
 The class contains a translation of the constants defined in the
 <sys/ipc.h>, <sys/shm.h>, and <sys/sem.h> header files.  These
 constants are used internally by the class and cannot be imported into
-a calling environment.  To do that, use IPC::SysV instead.  Indeed, I
+a calling environment. To do that, use IPC::SysV instead. Indeed, I
 would have used IPC::SysV myself, but I haven't been able to get it to
 compile on any system I have access to :-(.
 
-Shared memory segments are acquired with sizes of SHM_BUFSIZ.
-SHM_BUFSIZ's largest possible value is nominally SHMMAX, which is
-highly system-dependent.  Indeed, for some systems it may be defined
-at boot time.  If you can't seem to tie() any variables, it may be
-that SHM_BUFSIZ is set a value that exceeds SHMMAX on your system.
-Try reducing the size of this constant and recompiling the module.
+Shared memory segments are acquired with sizes of
+SHM_BUFSIZ. SHM_BUFSIZ's largest possible value is nominally SHMMAX,
+which is highly system-dependent. Indeed, for some systems it may be
+defined at boot time. If you can't seem to tie() any variables, it may
+be that SHM_BUFSIZ is set a value that exceeds SHMMAX on your
+system. Try reducing the size of SHM_BUFSIZ and recompiling the
+module.
+
+The bulk of Shareable's behaviour when dealing with references relies
+on undocumented (and possibly unsupported) features of perl. Changes
+to perl in the future could break Shareable.
 
 There is a program called ipcs(1/8) that is available on at least
 Solaris and Linux that might be useful for cleaning moribund shared
@@ -66,15 +71,20 @@ IPC::Shareable or applications using it.
 
 IPC::Shareable version 0.20 or greater does not understand the format
 of shared memory segments created by earlier versions of
-IPC::Shareable.  If you try to tie to such segments, you will get an
-error.  The only work around is to clear the shared memory segments
-and start with a fresh set.
+IPC::Shareable. If you try to tie to such segments, you will get an
+error. The only work around is to clear the shared memory segments and
+start with a fresh set.
+
+Set the variable *$IPC::Shareable::Debug* to a true value to produce
+*many* verbose debugging messages on the standard error (I don't use
+the Perl debugger as much as I should...)
 
 So far IPC::Shareable has been known to work on the following
 platforms:
     SPARC Solaris 2.5.1
     i586 Linux 2.0.x
     Digital Unix 4 (thanks Stephane Bortzmeyer <bortzmeyer@pasteur.fr>)
+    HP-UX 10.20 (Thanks Kees Vonk <fx77@dial.pipex.com>)
 	
 If you install this module on a platform other than those, let me know
 and I'll add it to this list.
@@ -94,4 +104,4 @@ about usage, pitfalls, etc.
 
 --
 Ben Sugars <bsugars@canoe.ca>
-October 8, 1997.
+October 23, 1997.
