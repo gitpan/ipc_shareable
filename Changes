@@ -23,3 +23,21 @@ Revision history for Perl extension IPC::Shareable.
 0.16  Mon Aug 11 16:10:54 EDT 1997
 	- new shared memory segments now initialized with null
 	  values; Ben Sugars.
+
+0.17  Wed Aug 27 15:57:11 EDT 1997
+	- fixed some bugs in &parse_argument_hash; Ben Sugars.
+
+0.18  Thu Aug 28 09:12:30 EDT 1997
+	- fixed garbage collection bug; Ben Sugars.  Thanks to
+	Michael Stevens <michael@imaginet.co.uk> for the patch.
+
+0.20  Thu Aug 28 15:13:46 EDT 1997
+	- added ability to magically create ties to implicitly
+	referenced thingys; Ben Sugars.
+
+0.25  Tue Oct  7 14:41:49 EDT 1997
+	- added more checking of sem*() and shm*() return values;
+	Michael Stevens and Ben Sugars.
+	- added shlock and shunlock; Ben Sugars.
+	- fixed bug that would cause modifications of magically
+	referenced thingys to fail.  Thanks to Maurice Aubrey

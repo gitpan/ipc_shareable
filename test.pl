@@ -8,7 +8,7 @@ BEGIN {
 	exit;
     }
 $SIG{INT} = \&catch_int;
-$| = 1; print "1..11\n";
+$| = 1; print "1..16\n";
 }
 END {print "not ok 1\n" unless $loaded;}
 use IPC::Shareable;
@@ -138,11 +138,7 @@ if ($pid == 0) {
 }
 untie $scalar;
 
-# --- Now that (minimal) IPC is working, we use it to keep
-# --- track of the test number in the future
-
 # --- Test fragmentation
-#$IPC::Shareable::Debug = 1;
 $ok = 1;
 ++$number;
 $pid = fork;
@@ -155,31 +151,96 @@ $shm_bufsiz = &IPC::Shareable::SHM_BUFSIZ;
 if ($pid == 0) {
     # --- Child
     sleep; # - To ensure parent process creates the binding first
-    tie($ipc_test_number, IPC::Shareable, 't_no', { 'create' => 'no', 'destroy' => 'no' })
-	or die "child process can't tie test number";
     tie($long_scalar, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
-	or die "child process can't tie \$long scalar";
+	or die "child process can't tie \$long_scalar";
     $long_scalar = 'foo' x ($shm_bufsiz * 3); # - Lots of data
     exit;
 } else {
     # --- Parent
-    tie($ipc_test_number, IPC::Shareable, 't_no', { 'create' => 'yes', 'destroy' => 'yes' })
-	or die "parent process can't tie test number";
     tie($long_scalar, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
-	or die "parent process can't tie \$long scalar";
-    $ipc_test_number = $number;
-    ++$ipc_test_number;
+	or die "parent process can't tie \$long_scalar";
     sleep 2; # - Makes sure the following alarm doesn't ring to soon
     kill $signo{ALRM}, $pid; # - Wake up the child process
     wait;
     $long_scalar eq ('foo' x ($shm_bufsiz * 3)) or
 	undef $ok;
     print $ok ? "ok $number\n" : "not ok $number\n";
+    untie $long_scalar;
+}
+
+# --- Test locking
+$ok = 1;
+++$number;
+$pid = fork;
+defined $pid or die $|;
+if ($pid == 0) {
+    # --- Child
+    sleep; # - To ensure parent process creates the binding first
+    tie($scalar, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
+	or die "child process can't tie \$scalar";
+    for $i (0 .. 99) {
+  	(tied $scalar)->shlock;
+	++$scalar;
+	(tied $scalar)->shunlock;
+    }
+    exit;
+} else {
+    # --- Parent
+    tie($scalar, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
+	or die "parent process can't tie \$scalar";
+    $scalar = 0;
+    sleep 2; # - Makes sure the following alarm doesn't ring to soon
+    kill $signo{ALRM}, $pid; # - Wake up the child process
+    for $i (0 .. 99) {
+	(tied $scalar)->shlock;
+	++$scalar;
+	(tied $scalar)->shunlock;
+    }
+    wait;
+    ($scalar == 200)
+	or undef $ok;
+    print $ok ? "ok $number\n" : "not ok $number\n";
+    untie $scalar;
+}
+
+# --- Test magical construction of references
+$ok = 1;
+++$number;
+$pid = fork;
+defined $pid or die $|;
+if ($pid == 0) {
+    # --- Child
+    sleep; # - To ensure parent process creates the binding first
+    tie(%hash, IPC::Shareable, 'data', { 'create' => 'no', 'destroy' => 'no' })
+	or die "child process can't tie \%hash";
+    ++$number; # - Parent does one test
+    ($hash{'foo'}{'bar'} eq 'xyzzy')
+	or undef $ok;
+    print $ok ? "ok $number\n" : "not ok $number\n";
+    ++$number;
+    $hash{'foo'}{'bar'} = 'blurp';
+    ($hash{'foo'}{'bar'} eq 'blurp')
+	or undef $ok;
+    print $ok ? "ok $number\n" : "not ok $number\n";
+    exit;
+} else {
+    # --- Parent
+    tie(%hash, IPC::Shareable, 'data', { 'create' => 'yes', 'destroy' => 'yes' })
+	or die "parent process can't tie \%hash";
+    sleep 2; # - Makes sure the following alarm doesn't ring to soon
+    $hash{'foo'}{'bar'} = 'xyzzy';
+    ($hash{'foo'}{'bar'} eq 'xyzzy')
+	or undef $ok;
+    print $ok ? "ok $number\n" : "not ok $number\n";
+    ++$number;
+    kill $signo{ALRM}, $pid; # - Wake up the child process
+    wait;
+    $number += 2; # - Child does two tests
+    $hash{'foo'}{'bar'} eq 'blurp'
+	or undef $ok;
+    print $ok ? "ok $number\n" : "not ok $number\n";
+    untie %hash;
 }
 
 # --- Other tests to be added soon
-
-
 exit;
-
-

@@ -64,10 +64,24 @@ Solaris and Linux that might be useful for cleaning moribund shared
 memory segments or semaphore sets produced by bugs in either
 IPC::Shareable or applications using it.
 
-At the time of writing, I have only had the chance to install on Linux
-2.0.x machines and Solaris 2.5.1 machines.  If you install this module
-on a platform other than those, let me know and I'll add it to this
-list.
+IPC::Shareable version 0.20 or greater does not understand the format
+of shared memory segments created by earlier versions of
+IPC::Shareable.  If you try to tie to such segments, you will get an
+error.  The only work around is to clear the shared memory segments
+and start with a fresh set.
+
+So far IPC::Shareable has been known to work on the following
+platforms:
+    SPARC Solaris 2.5.1
+    i586 Linux 2.0.x
+    Digital Unix 4 (thanks Stephane Bortzmeyer <bortzmeyer@pasteur.fr>)
+	
+If you install this module on a platform other than those, let me know
+and I'll add it to this list.
+
+Stephane has also used the module with mod_perl (Perl 5.004_01 and
+Apache 1.2.1).  See http://josephine.sis.pasteur.fr/perl/global.pl for
+an example.
 
 Documentation
 -------------
@@ -80,4 +94,4 @@ about usage, pitfalls, etc.
 
 --
 Ben Sugars <bsugars@canoe.ca>
-August 11, 1997.
+October 8, 1997.

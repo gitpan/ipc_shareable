@@ -1,11 +1,11 @@
-% LaTeX document produced by pod2latex from "Shareable.pm.pod".
+% LaTeX document produced by pod2latex from "../Shareable.pm.pod".
 % The followings need be defined in the preamble of this document:
 %\def\C++{{\rm C\kern-.05em\raise.3ex\hbox{\footnotesize ++}}}
 %\def\underscore{\leavevmode\kern.04em\vbox{\hrule width 0.4em height 0.3pt}}
 %\setlength{\parindent}{0pt}
 
-\section{SHAREABLE.PM}%
-\index{SHAREABLE.PM}
+\section{../SHAREABLE.PM}%
+\index{../SHAREABLE.PM}
 
 \subsection*{NAME}
 IPC::Shareable --- share Perl variables between processes
@@ -14,6 +14,8 @@ IPC::Shareable --- share Perl variables between processes
   use IPC::Shareable;
   tie($scalar, IPC::Shareable, $glue, { %options });
   tie(%hash, IPC::Shareable, $glue, { %options });
+  (tied %hash)->shlock;
+  (tied %hash)->shunlock;
 \end{verbatim}
 
 \subsection*{CONVENTIONS}%
@@ -128,6 +130,65 @@ process calling {\em tie()\/} exits (gracefully){\tt [}3{\tt ]}.
 
 \end{description}
 
+\subsection*{LOCKING}%
+\index{LOCKING}
+
+Shareable provides methods to implement application-level locking of
+the shared data structures.  These methods are called {\em shlock()\/} and
+{\em shunlock()\/}.  To use them you must first get the tied object, either by
+saving the return value of the original call to {\em tie()\/} or by using the
+built-in {\em tied()\/} function.
+
+To lock a variable, do this:
+\begin{verbatim}
+  $knot = tie($scalar, IPC::Shareable, $glue, { %options });
+  ...
+  $knot->shlock;
+\end{verbatim}
+
+or equivalently
+\begin{verbatim}
+  tie($scalar, IPC::Shareable, $glue, { %options });
+  (tied $scalar)->shlock;
+\end{verbatim}
+
+This will place an exclusive lock on the data of \$scalar.
+
+To unlock a variable do this:
+\begin{verbatim}
+  $knot->shunlock;
+\end{verbatim}
+
+or
+\begin{verbatim}
+  (tied $scalar)->shunlock;
+\end{verbatim}
+
+Note that there is no mechanism for shared locks, but you're probably
+safe to rely on Shareable's internal locking mechanism in situations
+that would normally call for a shared lock so that's not a big
+drawback.  In general, a lock only needs to be applied during a
+non-atomic write operation.  For instance, a statement like
+\begin{verbatim}
+  $scalar = 10;
+\end{verbatim}
+
+doesn't really need a lock since it's atomic.  However, if you want to
+increment, you really should do
+\begin{verbatim}
+  (tied $scalar)->shlock;
+  ++$scalar;
+  (tied $scalar)->shunlock;
+\end{verbatim}
+
+since ++\$scalar is non-atomic.
+
+Read-only operations are (I think) atomic so you don't really need to
+lock for them.
+
+There are some pitfalls regarding locking and signals that you should
+make yourself aware of; these are discussed in the {\tt NOTES} entry elsewhere in this document.
+
 \subsection*{EXAMPLES}
 In a file called {\bf server}:
 \begin{verbatim}
@@ -201,7 +262,8 @@ the output from being interrupted by shell prompts):
 \index{RETURN VALUES}
 
 Calls to {\em tie()\/} that try to implement IPC::Shareable will return true
-if successful, {\em undef\/} otherwise.
+if successful, {\em undef\/} otherwise.  The value returned is an instance
+of the IPC::Shareable class.
 
 \subsection*{INTERNALS}%
 \index{INTERNALS}
@@ -244,20 +306,44 @@ dereferences the blessed reference to perform a lookup in
             'key' => $glue,
 \end{verbatim}
 \begin{verbatim}
+            # - The options passed when tie() was called
+            'options' => { %options },
+\end{verbatim}
+\begin{verbatim}
             # - The value of FLAGS for shmget() calls.
             'flags' => $flags,
 \end{verbatim}
 \begin{verbatim}
             # - Destroy shm segements on exit?
             'destroy' => $destroy,
-\end{verbatim}
-\begin{verbatim}
+                    ;
             # - Data cache
-            'DATA' => \$data || \%data,
+            'DATA' => {
+                # - User data
+                'user' => \$data || \%data,
+                # - Internal data used to manage magically
+                # - created tie()d variables
+                'internal => {
+                    # - Identifier of associated data
+                    $string_1 => {
+                        'key' => $key, # - Used when tie()ing
+                        'type' => $type, # - Type of thingy to tie to
+                        'hash_key' => $hash_key, # - Where to store info
+                    },
+                    $string_2 => {
+                        ...
+                    },
+                    ...
+                },
+            },
 \end{verbatim}
 \begin{verbatim}
             # - The version number of the cached data
             'version' => $version,
+\end{verbatim}
+\begin{verbatim}
+            # - A flag that indicates if this process has a lock
+            'lock' => $flag,
             },
        ...
    );
@@ -273,6 +359,26 @@ these semaphores are examined to see if another process has created a
 more recent version than the cached version.  If a more recent version
 is available, it will be retrieved from shared memory and used. If no
 more recent version has been created, the cached version is used{\tt [}5{\tt ]}.
+
+Also stored in the {\em 'DATA'\/} field is a structure that identifies any
+"magically created" {\em tie()\/}d variables associated with this variable.
+These variables are created by assignments like the following{\tt [}6{\tt ]}:
+\begin{verbatim}
+    $hash{'foo'}{'bar'} = 'xyzzy';
+\end{verbatim}
+
+Although it may not look like it, this assignment actually stores data
+in $\ast$two$\ast$ hashes: \%hash, and an anonymous hash referenced by
+\$hash\{'foo'\} that springs into existence at run time.  IPC::Shareable
+handles this by secretly {\em tie()\/}ing the anonymous hash.  When another
+process {\em tie()\/}s to a shared variable, the IPC::Shareable will loop
+through all of the keys contained in
+\%\{\$Shm\underscore{}Info\{\$id\}\{'DATA'\}\{'internal'\}\} and ties to all of data
+structures therein.
+
+Versions of IPC::Shareable prior to 0.20 do not handle such implicit
+creation of anonymous hashes properly.  Versions prior to 0.25 do not
+handle modification of implicitly created hashes properly.
 
 Another important thing to know is that IPC::Shareable allocates
 shared memory of a constant size SHM\underscore{}BUFSIZ, where SHM\underscore{}BUFSIZ is
@@ -334,6 +440,20 @@ result if another process added or removed a key from the hash being
 iterated over.  To guard against this, the cached version is always
 used during such cases.
 
+\item
+The way IPC::Shareable checks if this is necessary or not is by
+examining the contents of the thingy being referenced.  If the thingy
+is emtpy, it assumes an implicit reference is being created and it
+goes ahead and ties the thingy.  Otherwise Shareable does not tie the
+thingy.  This means that a statement like
+\begin{verbatim}
+    $hash{'foo'} = {}
+\end{verbatim}
+
+Would actually cause IPC::Shareable to tie the emtpy anonymous array,
+although in this case it really does not need to.  This is probably a
+bug.
+
 \end{enumerate}
 
 \subsubsection*{General Notes}%
@@ -342,12 +462,21 @@ used during such cases.
 \begin{description}
 
 \item[o]
+When using {\em shlock()\/} to lock a variable, be careful to guard against
+signals.  Under normal circumstances, Shareable's DESTROY method
+unlocks any locked variables when the process exits.  However, if an
+untrapped signal is received while a process holds an exclusive lock,
+DESTROY will not be called and the lock may be maintained even though
+the process has exited.  If this scares you, you might be better off
+implementing your own locking methods.
+
+\item[o]
 As mentioned in the {\tt INTERNALS} entry elsewhere in this documentshared memory segments are acquired
 with sizes of SHM\underscore{}BUFSIZ.  SHM\underscore{}BUFSIZ's largest possible value is
 nominally SHMMAX, which is highly system-dependent.  Indeed, for some
 systems it may be defined at boot time.  If you can't seem to {\em tie()\/}
 any variables, it may be that SHM\underscore{}BUFSIZ is set a value that exceeds
-SHMMAX on your system.  Try reducing the size of this constant and
+SHMMAX on your system.  Try reducing the size of SHM\underscore{}BUFSIZ and
 recompiling the module.
 
 \item[o]
@@ -359,10 +488,26 @@ would have used IPC::SysV myself, but I haven't been able to get it to
 compile on any system I have access to :-(.
 
 \item[o]
+Use caution when choosing your values of \$glue.  If IPC::Shareable
+needs to acquire more shared memory segments (due to a buffer overrun,
+or implicit referencing), those shared memory segments will have a
+different \$glue than the \$glue supplied by the application.  In
+general, \$glues should be well separated: {\bf aaaa} and {\bf zzzz} are good
+choices, since they are unlikely to collide, but {\bf aaaa} and {\bf aaab}
+could easily collide.
+
+\item[o]
 There is a program called {\em ipcs\/}(1/8) that is available on at least
 Solaris and Linux that might be useful for cleaning moribund shared
 memory segments or semaphore sets produced by bugs in either
 IPC::Shareable or applications using it.
+
+\item[o]
+IPC::Shareable version 0.20 or greater does not understand the format
+of shared memory segments created by earlier versions of
+IPC::Shareable.  If you try to tie to such segments, you will get an
+error.  The only work around is to clear the shared memory segments
+and start with a fresh set.
 
 \item[o]
 Set the variable {\em \$IPC::Shareable::Debug\/} to a true value to produce
@@ -370,6 +515,14 @@ $\ast$many$\ast$ verbose debugging messages on the standard error (I don't use
 the Perl debugger as much as I should... )
 
 \end{description}
+
+\subsection*{CREDITS}%
+\index{CREDITS}
+
+Thanks to all those with comments or bug fixes, especially Stephane
+Bortzmeyer $<$bortzmeyer@pasteur.fr$>$, Michael Stevens
+$<$michael@malkav.imaginet.co.uk$>$, and Richard Neal
+$<$richard@imaginet.co.uk$>$
 
 \subsection*{BUGS}
 Certainly; this is alpha software.
