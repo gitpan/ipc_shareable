@@ -1,0 +1,643 @@
+    <HTML> 
+	<HEAD> 
+	    <TITLE>IPC::Shareable - share Perl variables between processes
+
+</TITLE> 
+	</HEAD>
+
+	<BODY>
+
+<!-- INDEX BEGIN -->
+
+<UL>
+
+	<LI><A HREF="#NAME">NAME</A>
+	<LI><A HREF="#SYNOPSIS">SYNOPSIS</A>
+	<LI><A HREF="#CONVENTIONS">CONVENTIONS</A>
+	<LI><A HREF="#DESCRIPTION">DESCRIPTION</A>
+	<LI><A HREF="#OPTIONS">OPTIONS</A>
+	<LI><A HREF="#EXAMPLES">EXAMPLES</A>
+	<LI><A HREF="#RETURN_VALUES">RETURN VALUES</A>
+	<LI><A HREF="#INTERNALS">INTERNALS</A>
+	<LI><A HREF="#AUTHOR">AUTHOR</A>
+	<LI><A HREF="#NOTES">NOTES</A>
+	<UL>
+
+		<LI><A HREF="#Footnotes_from_the_above_section">Footnotes from the above sections</A>
+		<LI><A HREF="#General_Notes">General Notes</A>
+	</UL>
+
+	<LI><A HREF="#BUGS">BUGS</A>
+	<LI><A HREF="#SEE_ALSO">SEE ALSO</A>
+</UL>
+<!-- INDEX END -->
+
+<HR>
+<P>
+<H1><A NAME="NAME">NAME
+
+</A></H1>
+IPC::Shareable - share Perl variables between processes
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="SYNOPSIS">SYNOPSIS
+
+</A></H1>
+<PRE>  use IPC::Shareable;
+  tie($scalar, IPC::Shareable, $glue, { %options });
+  tie(%hash, IPC::Shareable, $glue, { %options });
+</PRE>
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="CONVENTIONS">CONVENTIONS
+
+</A></H1>
+The occurrence of a number in square brackets, as in [N], in the text of
+this document refers to a numbered note in the <A HREF="#NOTES">NOTES</A>.
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="DESCRIPTION">DESCRIPTION
+
+</A></H1>
+IPC::Shareable allows you to tie a a variable to shared memory making it
+easy to share the contents of that variable with other Perl processes.
+Currently either scalars or hashes can be tied; tying of arrays remains a
+work in progress. However, the variable being tied may contain arbitrarily
+complex data structures - including references to arrays, hashes of hashes,
+etc.
+
+
+<P>
+
+The association between variables in distinct processes is provided by
+<EM>$glue</EM>. This is an integer number or 4 character string[1] that serves as a
+common identifier for data across process space. Hence the statement
+
+
+<P>
+
+<PRE>        tie($scalar, IPC::Shareable, 'data');
+</PRE>
+
+<P>
+
+in program one and the statement
+
+
+<P>
+
+<PRE>        tie($variable, IPC::Shareable, 'data');
+</PRE>
+
+<P>
+
+in program two will bind <CODE>$scalar</CODE> in program one and
+<CODE>$variable</CODE> in program two. There is no pre-set limit to the
+number of processes that can bind to data; nor is there a pre-set limit to
+the size or complexity of the underlying data of the tied variables[2].
+
+
+<P>
+
+The bound data structures are all linearized (using Raphael Manfredi's
+Storable module) before being slurped into shared memory. Upon retrieval,
+the original format of the data structure is recovered. Semaphore flags are
+used for versioning and managing a per-process cache, allowing quick
+retrieval of data when, for instance, operating on a <CODE>tie()d</CODE>
+variable in a tight loop.
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="OPTIONS">OPTIONS
+
+</A></H1>
+Options are specified by passing a reference to a hash as the fourth
+argument to the tie function that enchants a variable. Alternatively you
+can pass a reference to a hash as the third argument; IPC::Shareable will
+then look at the field named <EM>'key'</EM> in this hash for the value of <EM>$glue</EM>. So,
+
+
+<P>
+
+<PRE>        tie($variable, IPC::Shareable, 'data', \%options);
+</PRE>
+
+<P>
+
+is equivalent to
+
+
+<P>
+
+<PRE>        tie($variable, IPC::Shareable, { 'key' =&gt; 'data', ... });
+</PRE>
+
+<P>
+
+When defining an options hash, values that match the word <EM>'no'</EM> in a case-insensitive manner are treated as false. Therefore, setting
+<CODE>$options{'create'} = 'No';</CODE> is the same as <CODE>$options{'create'} =
+0;</CODE>.
+
+
+<P>
+
+The following fields are recognized in the options hash.
+
+
+<P>
+
+<DL>
+<DT><STRONG><A NAME="item_key">key
+
+</A></STRONG><DD>
+The <EM>'key'</EM> field is used to determine the <EM>$glue</EM> if <EM>$glue</EM> was not present in the call to <CODE>tie().</CODE> This argument is then,
+in turn, used as the KEY argument in subsequent calls to
+<CODE>shmget()</CODE> and <CODE>semget().</CODE> If this field is not
+provided, a value of IPC_PRIVATE is assumed, meaning that your variables
+cannot be shared with other processes. (Note that setting <EM>$glue</EM> to 0 is the same as using IPC_PRIVATE.)
+
+
+<P>
+
+<DT><STRONG><A NAME="item_create">create
+
+</A></STRONG><DD>
+If <EM>'create'</EM> is set to a true value, IPC::Shareable will create a new binding associated
+with <EM>$glue</EM> if such a binding does not already exist. If <EM>'create'</EM> is false, calls to <CODE>tie()</CODE> will fail (returning undef) if such a
+binding does not already exist. This is achieved by ORing IPC_PRIVATE into
+FLAGS argument of calls to <CODE>shmget()</CODE> when
+<EM>create</EM> is true.
+
+
+<P>
+
+<DT><STRONG><A NAME="item_exclusive">exclusive
+
+</A></STRONG><DD>
+If <EM>'exclusive'</EM> field is set to a true value, calls to <CODE>tie()</CODE> will fail
+(returning undef) if a data binding associated with <EM>$glue</EM>
+already exists. This is achieved by ORing IPC_ IPC_EXCL into the FLAGS
+argument of calls to <CODE>shmget()</CODE> when <EM>'exclusive'</EM> is true.
+
+
+<P>
+
+<DT><STRONG><A NAME="item_mode">mode
+
+</A></STRONG><DD>
+The <EM>mode</EM> argument is an octal number specifying the access permissions when a new
+data binding is being created. These access permission are the same as file
+access permissions in that 0666 is world readable, 0600 is readable only by
+the effective UID of the process creating the shared variable, etc. If not
+provided, a default of 0666 (world readable and writable) will be assumed.
+
+
+<P>
+
+<DT><STRONG><A NAME="item_destroy">destroy
+
+</A></STRONG><DD>
+If set to a true value, the data binding will be destroyed when the process
+calling <CODE>tie()</CODE> exits (gracefully)[3].
+
+
+<P>
+
+</DL>
+<P>
+<HR>
+<H1><A NAME="EXAMPLES">EXAMPLES
+
+</A></H1>
+In a file called <STRONG>server</STRONG>:
+
+
+<P>
+
+<PRE>    #!/usr/bin/perl -w
+    use IPC::Shareable;
+    $glue = 'data';
+    %options = (
+        'create' =&gt; 'yes',
+        'exclusive' =&gt; 'no',
+        'mode' =&gt; 0644,
+        'destroy' =&gt; 'yes',
+    );
+    tie(%colours, IPC::Shareable, $glue, { %options }) or
+        die &quot;server: tie failed\n&quot;;
+    %colours = (
+        'red' =&gt; [
+             'fire truck',
+             'leaves in the fall',
+        ],
+        'blue' =&gt; [
+             'sky',
+             'police cars',
+        ],
+    );
+    (print(&quot;server: there are 2 colours\n&quot;), sleep 5)
+        while scalar keys %colours == 2;
+    print &quot;server: here are all my colours:\n&quot;;
+    foreach $colour (keys %colours) {
+        print &quot;server: these are $colour: &quot;,
+            join(', ', @{$colours{$colour}}), &quot;\n&quot;;
+    }
+    exit;
+</PRE>
+
+<P>
+
+In a file called <STRONG>client</STRONG>
+
+
+
+
+<P>
+
+<PRE>    #!/usr/bin/perl -w
+    use IPC::Shareable;
+    $glue = 'data';
+    %options = (
+        'key' =&gt; 'paint',
+        'create' =&gt; 'no',
+        'exclusive' =&gt; 'no',
+        'mode' =&gt; 0644,
+        'destroy' =&gt; 'no',
+        );
+    tie(%colours, IPC::Shareable, $glue, { %options }) or
+        die &quot;client: tie failed\n&quot;;
+    foreach $colour (keys %colours) {
+        print &quot;client: these are $colour: &quot;,
+            join(', ', @{$colours{$colour}}), &quot;\n&quot;;
+    }
+    delete $colours{'red'};
+    exit;
+</PRE>
+
+<P>
+
+And here is the output (the sleep commands in the command line prevent the
+output from being interrupted by shell prompts):
+
+
+<P>
+
+<PRE>    bash$ ( ./server &amp; ) ; sleep 10 ; ./client ; sleep 10
+    server: there are 2 colours
+    server: there are 2 colours
+    server: there are 2 colours
+    client: these are blue: sky, police cars
+    client: these are red: fire truck, leaves in the fall
+    server: here are all my colours:
+    server: these are blue: sky, police cars
+</PRE>
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="RETURN_VALUES">RETURN VALUES
+
+</A></H1>
+Calls to <CODE>tie()</CODE> that try to implement IPC::Shareable will
+return true if successful, <EM>undef</EM> otherwise.
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="INTERNALS">INTERNALS
+
+</A></H1>
+When a variable is <CODE>tie()d,</CODE> a blessed reference to a SCALAR is
+created. (This is true even if it is a HASH being <CODE>tie()d.)</CODE> The
+value thereby referred is an integer[4] ID that is used as a key in a hash
+called
+<EM>%IPC::Shareable::Shm_Info</EM>; this hash is created and maintained by IPC::Shareable to manage the
+variables it has <CODE>tie()d.</CODE> When IPC::Shareable needs to perform
+an operation on a <CODE>tie()d</CODE> variable, it dereferences the blessed
+reference to perform a lookup in
+<EM>%IPC::Shareable::Shm_Info</EM> for the information needed to proceed.
+
+
+<P>
+
+<EM>%IPC::Shareable::Shm_Info</EM> has the following structure:
+
+
+<P>
+
+<PRE>    %IPC::Shareable::Shm_Info = (
+</PRE>
+
+<P>
+
+<PRE>        # - The id of an enchanted variable
+        $id =&gt; {
+</PRE>
+
+<P>
+
+<PRE>            # -  A literal indicating the variable type
+            'type' =&gt; 'SCALAR' || 'HASH',
+</PRE>
+
+<P>
+
+<PRE>            # - Shm segment IDs for this variable
+            'frag_id' =&gt; {
+                '0' =&gt; $id_1, # - ID of first shm segment
+                '1' =&gt; $id_2, # - ID of next shm segment
+                ... # - etc
+            },
+</PRE>
+
+<P>
+
+<PRE>            # - ID of associated semaphores
+            'sem_id' =&gt; $semid,
+</PRE>
+
+<P>
+
+<PRE>            # - The I&lt;$glue&gt; used when tie() was called
+            'key' =&gt; $glue,
+</PRE>
+
+<P>
+
+<PRE>            # - The value of FLAGS for shmget() calls.
+            'flags' =&gt; $flags,
+</PRE>
+
+<P>
+
+<PRE>            # - Destroy shm segements on exit?
+            'destroy' =&gt; $destroy,
+</PRE>
+
+<P>
+
+<PRE>            # - Data cache
+            'DATA' =&gt; \$data || \%data,
+</PRE>
+
+<P>
+
+<PRE>            # - The version number of the cached data
+            'version' =&gt; $version,
+            },
+       ...
+   );
+</PRE>
+
+<P>
+
+Perhaps the most important thing to note the existence of the
+<EM>'DATA'</EM> and <EM>'version'</EM> fields: data for all <CODE>tie()d</CODE> variables is stored locally in a
+per-process cache. When storing data, the values of the semaphores referred
+to by <EM>$Shm_Info{$id}{'sem_id'}</EM> are changed to indicate to the world a new version of the data is
+available. When retrieving data for a <CODE>tie()d</CODE> variables, the
+values of these semaphores are examined to see if another process has
+created a more recent version than the cached version. If a more recent
+version is available, it will be retrieved from shared memory and used. If
+no more recent version has been created, the cached version is used[5].
+
+
+<P>
+
+Another important thing to know is that IPC::Shareable allocates shared
+memory of a constant size SHM_BUFSIZ, where SHM_BUFSIZ is defined in this
+module. If the amount of (serialized) data exceeds this value, it will be
+fragmented into multiple segments during a write operation and reassembled
+during a read operation.
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="AUTHOR">AUTHOR
+
+</A></H1>
+Benjamin Sugars <A HREF="MAILTO:<bsugars@canoe.ca>"><bsugars@canoe.ca></A>
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="NOTES">NOTES
+
+</A></H1>
+<P>
+<HR>
+<H2><A NAME="Footnotes_from_the_above_section">Footnotes from the above sections
+
+</A></H2>
+<OL>
+<LI><STRONG><A NAME="item_">
+
+</A></STRONG>
+If <EM>$glue</EM> is longer than 4 characters, only the 4 most significant characters are
+used. These characters are turned into integers by <CODE>unpack()ing</CODE>
+them. If <EM>$glue</EM> is less than 4 characters, it is space padded.
+
+
+<P>
+
+<LI><STRONG><A NAME="item_">
+
+</A></STRONG>
+IPC::Shareable provides no pre-set limits, but the system does. Namely,
+there are limits on the number of shared memory segments that can be
+allocated and the total amount of memory usable by shared memory.
+
+
+<P>
+
+<LI><STRONG><A NAME="item_">
+
+</A></STRONG>
+If the process has been smoked by an untrapped signal, the binding will
+remain in shared memory. If you're cautious, you might try
+
+
+<P>
+
+<PRE>    $SIG{INT} = \&amp;catch_int;
+    sub catch_int {
+        exit;
+    }
+    ...
+    tie($variable, IPC::Shareable, 'data', { 'destroy' =&gt; 'Yes!' });
+</PRE>
+
+<P>
+
+which will at least clean up after your user hits CTRL-C because
+IPC::Shareable's DESTROY method will be called. Or, maybe you'd like to
+leave the binding in shared memory, so subsequent process can recover the
+data...
+
+
+<P>
+
+<LI><STRONG><A NAME="item_">
+
+</A></STRONG>
+The integer happens to be the shared memory ID of the first shared memory
+segment used to store the variable's data.
+
+
+<P>
+
+<LI><STRONG><A NAME="item_">
+
+</A></STRONG>
+The exception to this is when the FIRSTKEY and NEXTKEY methods are
+implemented, presumably because of a call to <CODE>each()</CODE> or
+<CODE>keys().</CODE> In this case, the cached value is ALWAYS used until
+the end of the cached hash has been reached. Then the cache is refreshed
+with the public version (if the public version is more recent).
+
+
+<P>
+
+The reason for this is that if a (changed) public version is retrieved in
+the middle of a loop implemented via <CODE>each()</CODE> or
+<CODE>keys(),</CODE> chaos could result if another process added or removed
+a key from the hash being iterated over. To guard against this, the cached
+version is always used during such cases.
+
+
+<P>
+
+</OL>
+<P>
+<HR>
+<H2><A NAME="General_Notes">General Notes
+
+</A></H2>
+<DL>
+<DT><STRONG><A NAME="item_o">o
+
+</A></STRONG><DD>
+As mentioned in <A HREF="#INTERNALS">INTERNALS</A>, shared memory segments are acquired with sizes of SHM_BUFSIZ.
+SHM_BUFSIZ's largest possible value is nominally SHMMAX, which is highly
+system-dependent. Indeed, for some systems it may be defined at boot time.
+If you can't seem to <CODE>tie()</CODE> any variables, it may be that
+SHM_BUFSIZ is set a value that exceeds SHMMAX on your system. Try reducing
+the size of this constant and recompiling the module.
+
+
+<P>
+
+<DT><STRONG>o
+
+</A></STRONG><DD>
+The class contains a translation of the constants defined in the
+&lt;sys/ipc.h&gt;, &lt;sys/shm.h&gt;, and &lt;sys/sem.h&gt; header files.
+These constants are used internally by the class and cannot be imported
+into a calling environment. To do that, use IPC::SysV instead. Indeed, I
+would have used IPC::SysV myself, but I haven't been able to get it to
+compile on any system I have access to :-(.
+
+
+<P>
+
+<DT><STRONG>o
+
+</A></STRONG><DD>
+There is a program called <CODE>ipcs(1/8)</CODE> that is available on at
+least Solaris and Linux that might be useful for cleaning moribund shared
+memory segments or semaphore sets produced by bugs in either IPC::Shareable
+or applications using it.
+
+
+<P>
+
+<DT><STRONG>o
+
+</A></STRONG><DD>
+Set the variable <EM>$IPC::Shareable::Debug</EM> to a true value to produce *many* verbose debugging messages on the
+standard error (I don't use the Perl debugger as much as I should... )
+
+
+<P>
+
+</DL>
+<P>
+<HR>
+<H1><A NAME="BUGS">BUGS
+
+</A></H1>
+Certainly; this is alpha software.
+
+
+<P>
+
+The first bug is that I do not know what all the bugs are. If you discover
+an anomaly, send me an email at <A
+HREF="MAILTO:bsugars@canoe.ca.">bsugars@canoe.ca.</A>
+
+
+<P>
+
+Variables that have been declared local with <CODE>my()</CODE> and
+subsequently <CODE>tie()d</CODE> can act in a bizarre fashion if you store
+references in them. You can try not not using <CODE>my()</CODE> in these
+cases, or go through extra pain when dereferencing them, like this:
+
+
+<P>
+
+<PRE>    #!/usr/bin/perl
+    use IPC::Shareable;
+    my $scalar;
+    tie($scalar, IPC::Shareable, { 'destroy' =&gt; 'yes' });
+    $scalar = [ 0 .. 9 ];
+    @array = @$scalar;
+    for (0 .. 9) {
+        print &quot;$array[$_]\n&quot;; # $$scalar won't work after 'my $scalar;'
+    }
+</PRE>
+
+<P>
+
+I suspect the reason for this is highly mystical and requires a wizard to
+explain.
+
+
+<P>
+
+<P>
+<HR>
+<H1><A NAME="SEE_ALSO">SEE ALSO
+
+</A></H1>
+<CODE>perl(1),</CODE> <CODE>perltie(1),</CODE> <CODE>Storable(3),</CODE>
+<CODE>shmget(2)</CODE> and other SysV IPC man pages.
+
+
+<P>
+
+</DL>
+    </BODY>
+
+    </HTML>

@@ -1,0 +1,25 @@
+Revision history for Perl extension IPC::Shareable.
+
+0.01  Wed Jul 30 09:00:53 1997
+	- original version; created by h2xs 1.18.
+
+0.05  Wed Jul 30 15:02:31 EDT 1997
+	- scalars can now be tied; Ben Sugars.
+
+0.10  Fri Aug  1 13:32:52 EDT 1997
+	- can now tie both scalars and hashes of arbitrary length;
+	  Ben Sugars.
+
+0.11  Wed Aug  6 10:14:49 EDT 1997
+	- initial implementation of semaphores for versioning and
+	  caching; Ben Sugars.
+
+0.12  Thu Aug  7 14:47:42 EDT 1997
+	- various bug fixes; Ben Sugars.
+
+0.15  Fri Aug  8 15:45:29 EDT 1997
+	- implemented locking using semaphores; Ben Sugars.
+
+0.16  Mon Aug 11 16:10:54 EDT 1997
+	- new shared memory segments now initialized with null
+	  values; Ben Sugars.

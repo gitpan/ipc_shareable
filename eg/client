@@ -1,0 +1,18 @@
+#!/usr/bin/perl -w
+use IPC::Shareable;
+$glue = 'data';
+%options = (
+	    'key' => 'paint',
+	    'create' => 'no',
+	    'exclusive' => 'no',
+	    'mode' => 0644,
+	    'destroy' => 'no',
+	    );
+tie(%colours, IPC::Shareable, $glue, { %options }) or
+    die "client: tie failed\n";
+foreach $colour (keys %colours) {
+    print "client: these are $colour: ",
+    join(', ', @{$colours{$colour}}), "\n";
+}
+delete $colours{'red'};
+exit;

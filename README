@@ -1,0 +1,83 @@
+----------------------------------------------------------------------
+    This is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License , or
+    (at your option) any later version.
+ 
+    This software is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+ 
+    You should have received a copy of the GNU General Public License
+    along with this software. If not, write to the Free Software
+    Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
+----------------------------------------------------------------------
+
+	*** This is alpha software -- use at your own risks ***
+
+Introduction
+------------
+IPC::Shareable allows you to tie a a variable to shared memory making
+it easy to share the contents of that variable with other Perl
+processes.  Currently either scalars or hashes can be tied; tying of
+arrays remains a work in progress.  However, the variable being tied
+may contain arbitrarily complex data structures - including references
+to arrays, hashes of hashes, etc.
+
+Installation
+------------
+
+0.  Prerequisites:
+	-Perl version 5.003 or more recent.
+	-System V IPC (shmget(2), shmctl(2), etc).
+	-Storable.pm, version 0.5 or more recent.
+
+1.  Installation steps:
+	-from the directory where this file is located, type:
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+Notes
+-----
+
+(Some of this is found in the man page too.)
+
+The class contains a translation of the constants defined in the
+<sys/ipc.h>, <sys/shm.h>, and <sys/sem.h> header files.  These
+constants are used internally by the class and cannot be imported into
+a calling environment.  To do that, use IPC::SysV instead.  Indeed, I
+would have used IPC::SysV myself, but I haven't been able to get it to
+compile on any system I have access to :-(.
+
+Shared memory segments are acquired with sizes of SHM_BUFSIZ.
+SHM_BUFSIZ's largest possible value is nominally SHMMAX, which is
+highly system-dependent.  Indeed, for some systems it may be defined
+at boot time.  If you can't seem to tie() any variables, it may be
+that SHM_BUFSIZ is set a value that exceeds SHMMAX on your system.
+Try reducing the size of this constant and recompiling the module.
+
+There is a program called ipcs(1/8) that is available on at least
+Solaris and Linux that might be useful for cleaning moribund shared
+memory segments or semaphore sets produced by bugs in either
+IPC::Shareable or applications using it.
+
+At the time of writing, I have only had the chance to install on Linux
+2.0.x machines and Solaris 2.5.1 machines.  If you install this module
+on a platform other than those, let me know and I'll add it to this
+list.
+
+Documentation
+-------------
+
+The man page for IPC::Shareable is embedded in IPC::Shareable.pm.
+Copies of this document in various formats can be found in the doc
+directory of the distribution.  In there will you find information
+about usage, pitfalls, etc.
+
+
+--
+Ben Sugars <bsugars@canoe.ca>
+August 11, 1997.

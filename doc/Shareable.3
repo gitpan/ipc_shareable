@@ -1,0 +1,558 @@
+.rn '' }`
+''' $RCSfile$$Revision$$Date$
+'''
+''' $Log$
+'''
+.de Sh
+.br
+.if t .Sp
+.ne 5
+.PP
+\fB\\$1\fR
+.PP
+..
+.de Sp
+.if t .sp .5v
+.if n .sp
+..
+.de Ip
+.br
+.ie \\n(.$>=3 .ne \\$3
+.el .ne 3
+.IP "\\$1" \\$2
+..
+.de Vb
+.ft CW
+.nf
+.ne \\$1
+..
+.de Ve
+.ft R
+
+.fi
+..
+'''
+'''
+'''     Set up \*(-- to give an unbreakable dash;
+'''     string Tr holds user defined translation string.
+'''     Bell System Logo is used as a dummy character.
+'''
+.tr \(*W-|\(bv\*(Tr
+.ie n \{\
+.ds -- \(*W-
+.ds PI pi
+.if (\n(.H=4u)&(1m=24u) .ds -- \(*W\h'-12u'\(*W\h'-12u'-\" diablo 10 pitch
+.if (\n(.H=4u)&(1m=20u) .ds -- \(*W\h'-12u'\(*W\h'-8u'-\" diablo 12 pitch
+.ds L" ""
+.ds R" ""
+'''   \*(M", \*(S", \*(N" and \*(T" are the equivalent of
+'''   \*(L" and \*(R", except that they are used on ".xx" lines,
+'''   such as .IP and .SH, which do another additional levels of
+'''   double-quote interpretation
+.ds M" """
+.ds S" """
+.ds N" """""
+.ds T" """""
+.ds L' '
+.ds R' '
+.ds M' '
+.ds S' '
+.ds N' '
+.ds T' '
+'br\}
+.el\{\
+.ds -- \(em\|
+.tr \*(Tr
+.ds L" ``
+.ds R" ''
+.ds M" ``
+.ds S" ''
+.ds N" ``
+.ds T" ''
+.ds L' `
+.ds R' '
+.ds M' `
+.ds S' '
+.ds N' `
+.ds T' '
+.ds PI \(*p
+'br\}
+.\"	If the F register is turned on, we'll generate
+.\"	index entries out stderr for the following things:
+.\"		TH	Title 
+.\"		SH	Header
+.\"		Sh	Subsection 
+.\"		Ip	Item
+.\"		X<>	Xref  (embedded
+.\"	Of course, you have to process the output yourself
+.\"	in some meaninful fashion.
+.if \nF \{
+.de IX
+.tm Index:\\$1\t\\n%\t"\\$2"
+..
+.nr % 0
+.rr F
+.\}
+.TH Shareable 3 "perl 5.004, patch 01" "11/Aug/97" "User Contributed Perl Documentation"
+.IX Title "Shareable 3"
+.UC
+.IX Name "IPC::Shareable - share Perl variables between processes"
+.if n .hy 0
+.if n .na
+.ds C+ C\v'-.1v'\h'-1p'\s-2+\h'-1p'+\s0\v'.1v'\h'-1p'
+.de CQ          \" put $1 in typewriter font
+.ft CW
+'if n "\c
+'if t \\&\\$1\c
+'if n \\&\\$1\c
+'if n \&"
+\\&\\$2 \\$3 \\$4 \\$5 \\$6 \\$7
+'.ft R
+..
+.\" @(#)ms.acc 1.5 88/02/08 SMI; from UCB 4.2
+.	\" AM - accent mark definitions
+.bd B 3
+.	\" fudge factors for nroff and troff
+.if n \{\
+.	ds #H 0
+.	ds #V .8m
+.	ds #F .3m
+.	ds #[ \f1
+.	ds #] \fP
+.\}
+.if t \{\
+.	ds #H ((1u-(\\\\n(.fu%2u))*.13m)
+.	ds #V .6m
+.	ds #F 0
+.	ds #[ \&
+.	ds #] \&
+.\}
+.	\" simple accents for nroff and troff
+.if n \{\
+.	ds ' \&
+.	ds ` \&
+.	ds ^ \&
+.	ds , \&
+.	ds ~ ~
+.	ds ? ?
+.	ds ! !
+.	ds /
+.	ds q
+.\}
+.if t \{\
+.	ds ' \\k:\h'-(\\n(.wu*8/10-\*(#H)'\'\h"|\\n:u"
+.	ds ` \\k:\h'-(\\n(.wu*8/10-\*(#H)'\`\h'|\\n:u'
+.	ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'^\h'|\\n:u'
+.	ds , \\k:\h'-(\\n(.wu*8/10)',\h'|\\n:u'
+.	ds ~ \\k:\h'-(\\n(.wu-\*(#H-.1m)'~\h'|\\n:u'
+.	ds ? \s-2c\h'-\w'c'u*7/10'\u\h'\*(#H'\zi\d\s+2\h'\w'c'u*8/10'
+.	ds ! \s-2\(or\s+2\h'-\w'\(or'u'\v'-.8m'.\v'.8m'
+.	ds / \\k:\h'-(\\n(.wu*8/10-\*(#H)'\z\(sl\h'|\\n:u'
+.	ds q o\h'-\w'o'u*8/10'\s-4\v'.4m'\z\(*i\v'-.4m'\s+4\h'\w'o'u*8/10'
+.\}
+.	\" troff and (daisy-wheel) nroff accents
+.ds : \\k:\h'-(\\n(.wu*8/10-\*(#H+.1m+\*(#F)'\v'-\*(#V'\z.\h'.2m+\*(#F'.\h'|\\n:u'\v'\*(#V'
+.ds 8 \h'\*(#H'\(*b\h'-\*(#H'
+.ds v \\k:\h'-(\\n(.wu*9/10-\*(#H)'\v'-\*(#V'\*(#[\s-4v\s0\v'\*(#V'\h'|\\n:u'\*(#]
+.ds _ \\k:\h'-(\\n(.wu*9/10-\*(#H+(\*(#F*2/3))'\v'-.4m'\z\(hy\v'.4m'\h'|\\n:u'
+.ds . \\k:\h'-(\\n(.wu*8/10)'\v'\*(#V*4/10'\z.\v'-\*(#V*4/10'\h'|\\n:u'
+.ds 3 \*(#[\v'.2m'\s-2\&3\s0\v'-.2m'\*(#]
+.ds o \\k:\h'-(\\n(.wu+\w'\(de'u-\*(#H)/2u'\v'-.3n'\*(#[\z\(de\v'.3n'\h'|\\n:u'\*(#]
+.ds d- \h'\*(#H'\(pd\h'-\w'~'u'\v'-.25m'\f2\(hy\fP\v'.25m'\h'-\*(#H'
+.ds D- D\\k:\h'-\w'D'u'\v'-.11m'\z\(hy\v'.11m'\h'|\\n:u'
+.ds th \*(#[\v'.3m'\s+1I\s-1\v'-.3m'\h'-(\w'I'u*2/3)'\s-1o\s+1\*(#]
+.ds Th \*(#[\s+2I\s-2\h'-\w'I'u*3/5'\v'-.3m'o\v'.3m'\*(#]
+.ds ae a\h'-(\w'a'u*4/10)'e
+.ds Ae A\h'-(\w'A'u*4/10)'E
+.ds oe o\h'-(\w'o'u*4/10)'e
+.ds Oe O\h'-(\w'O'u*4/10)'E
+.	\" corrections for vroff
+.if v .ds ~ \\k:\h'-(\\n(.wu*9/10-\*(#H)'\s-2\u~\d\s+2\h'|\\n:u'
+.if v .ds ^ \\k:\h'-(\\n(.wu*10/11-\*(#H)'\v'-.4m'^\v'.4m'\h'|\\n:u'
+.	\" for low resolution devices (crt and lpr)
+.if \n(.H>23 .if \n(.V>19 \
+\{\
+.	ds : e
+.	ds 8 ss
+.	ds v \h'-1'\o'\(aa\(ga'
+.	ds _ \h'-1'^
+.	ds . \h'-1'.
+.	ds 3 3
+.	ds o a
+.	ds d- d\h'-1'\(ga
+.	ds D- D\h'-1'\(hy
+.	ds th \o'bp'
+.	ds Th \o'LP'
+.	ds ae ae
+.	ds Ae AE
+.	ds oe oe
+.	ds Oe OE
+.\}
+.rm #[ #] #H #V #F C
+.SH "NAME"
+.IX Header "NAME"
+IPC::Shareable \- share Perl variables between processes
+.SH "SYNOPSIS"
+.IX Header "SYNOPSIS"
+.PP
+.Vb 3
+\&  use IPC::Shareable;
+\&  tie($scalar, IPC::Shareable, $glue, { %options });
+\&  tie(%hash, IPC::Shareable, $glue, { %options });
+.Ve
+.SH "CONVENTIONS"
+.IX Header "CONVENTIONS"
+The occurrence of a number in square brackets, as in [N], in the text
+of this document refers to a numbered note in the the \f(CWNOTES\fR entry elsewhere in this document .
+.SH "DESCRIPTION"
+.IX Header "DESCRIPTION"
+IPC::Shareable allows you to tie a a variable to shared memory making
+it easy to share the contents of that variable with other Perl
+processes.  Currently either scalars or hashes can be tied; tying of
+arrays remains a work in progress.  However, the variable being tied
+may contain arbitrarily complex data structures \- including references
+to arrays, hashes of hashes, etc.
+.PP
+The association between variables in distinct processes is provided by
+\fI$glue\fR.  This is an integer number or 4 character string[1] that serves
+as a common identifier for data across process space.  Hence the
+statement
+.PP
+.Vb 1
+\&        tie($scalar, IPC::Shareable, 'data');
+.Ve
+in program one and the statement
+.PP
+.Vb 1
+\&        tie($variable, IPC::Shareable, 'data');
+.Ve
+in program two will bind \f(CW$scalar\fR in program one and \f(CW$variable\fR in
+program two.  There is no pre-set limit to the number of processes
+that can bind to data; nor is there a pre-set limit to the size or
+complexity of the underlying data of the tied variables[2].
+.PP
+The bound data structures are all linearized (using Raphael Manfredi's
+Storable module) before being slurped into shared memory.  Upon
+retrieval, the original format of the data structure is recovered.
+Semaphore flags are used for versioning and managing a per-process
+cache, allowing quick retrieval of data when, for instance, operating
+on a \fItie()\fRd variable in a tight loop.
+.SH "OPTIONS"
+.IX Header "OPTIONS"
+Options are specified by passing a reference to a hash as the fourth
+argument to the tie function that enchants a variable.  Alternatively
+you can pass a reference to a hash as the third argument;
+IPC::Shareable will then look at the field named \fI'key\*(R'\fR in this hash
+for the value of \fI$glue\fR.  So,
+.PP
+.Vb 1
+\&        tie($variable, IPC::Shareable, 'data', \e%options);
+.Ve
+is equivalent to
+.PP
+.Vb 1
+\&        tie($variable, IPC::Shareable, { 'key' => 'data', ... });
+.Ve
+When defining an options hash, values that match the word \fI'no\*(R'\fR in a
+case-insensitive manner are treated as false.  Therefore, setting
+\f(CW$options{'create'} = 'No';\fR is the same as \f(CW$options{'create'} =
+0;\fR.
+.PP
+The following fields are recognized in the options hash.
+.Ip "key" 4
+.IX Item "key"
+The \fI'key\*(R'\fR field is used to determine the \fI$glue\fR if \fI$glue\fR was
+not present in the call to \fItie()\fR.  This argument is then, in turn,
+used as the \s-1KEY\s0 argument in subsequent calls to \fIshmget()\fR and \fIsemget()\fR.
+If this field is not provided, a value of \s-1IPC_PRIVATE\s0 is assumed,
+meaning that your variables cannot be shared with other
+processes. (Note that setting \fI$glue\fR to 0 is the same as using
+\s-1IPC_PRIVATE\s0.)
+.Ip "create" 4
+.IX Item "create"
+If \fI'create\*(R'\fR is set to a true value, \s-1IPC::\s0Shareable will create a new
+binding associated with \fI$glue\fR if such a binding does not already
+exist.  If \fI'create\*(R'\fR is false, calls to \fItie()\fR will fail (returning
+undef) if such a binding does not already exist.  This is achieved by
+ORing \s-1IPC_PRIVATE\s0 into \s-1FLAGS\s0 argument of calls to \fIshmget()\fR when
+\fIcreate\fR is true.
+.Ip "exclusive" 4
+.IX Item "exclusive"
+If \fI'exclusive\*(R'\fR field is set to a true value, calls to \fItie()\fR will
+fail (returning undef) if a data binding associated with \fI$glue\fR
+already exists.  This is achieved by ORing \s-1IPC_\s0 \s-1IPC_EXCL\s0 into the
+\s-1FLAGS\s0 argument of calls to \fIshmget()\fR when \fI'exclusive\*(R'\fR is true.
+.Ip "mode" 4
+.IX Item "mode"
+The \fImode\fR argument is an octal number specifying the access
+permissions when a new data binding is being created.  These access
+permission are the same as file access permissions in that 0666 is
+world readable, 0600 is readable only by the effective \s-1UID\s0 of the
+process creating the shared variable, etc.  If not provided, a default
+of 0666 (world readable and writable) will be assumed.
+.Ip "destroy" 4
+.IX Item "destroy"
+If set to a true value, the data binding will be destroyed when the
+process calling \fItie()\fR exits (gracefully)[3].
+.SH "EXAMPLES"
+.IX Header "EXAMPLES"
+In a file called \fBserver\fR:
+.PP
+.Vb 29
+\&    #!/usr/bin/perl -w
+\&    use IPC::Shareable;
+\&    $glue = 'data';
+\&    %options = (
+\&        'create' => 'yes',
+\&        'exclusive' => 'no',
+\&        'mode' => 0644,
+\&        'destroy' => 'yes',
+\&    );
+\&    tie(%colours, IPC::Shareable, $glue, { %options }) or
+\&        die "server: tie failed\en";
+\&    %colours = (
+\&        'red' => [
+\&             'fire truck',
+\&             'leaves in the fall',
+\&        ],
+\&        'blue' => [
+\&             'sky',
+\&             'police cars',
+\&        ],
+\&    );
+\&    (print("server: there are 2 colours\en"), sleep 5)
+\&        while scalar keys %colours == 2;
+\&    print "server: here are all my colours:\en";
+\&    foreach $colour (keys %colours) {
+\&        print "server: these are $colour: ",
+\&            join(', ', @{$colours{$colour}}), "\en";
+\&    }
+\&    exit;
+.Ve
+In a file called \fBclient\fR
+.PP
+.Vb 18
+\&    #!/usr/bin/perl -w
+\&    use IPC::Shareable;
+\&    $glue = 'data';
+\&    %options = (
+\&        'key' => 'paint',
+\&        'create' => 'no',
+\&        'exclusive' => 'no',
+\&        'mode' => 0644,
+\&        'destroy' => 'no',
+\&        );
+\&    tie(%colours, IPC::Shareable, $glue, { %options }) or
+\&        die "client: tie failed\en";
+\&    foreach $colour (keys %colours) {
+\&        print "client: these are $colour: ",
+\&            join(', ', @{$colours{$colour}}), "\en";
+\&    }
+\&    delete $colours{'red'};
+\&    exit;
+.Ve
+And here is the output (the sleep commands in the command line prevent
+the output from being interrupted by shell prompts):
+.PP
+.Vb 8
+\&    bash$ ( ./server & ) ; sleep 10 ; ./client ; sleep 10
+\&    server: there are 2 colours
+\&    server: there are 2 colours
+\&    server: there are 2 colours
+\&    client: these are blue: sky, police cars
+\&    client: these are red: fire truck, leaves in the fall
+\&    server: here are all my colours:
+\&    server: these are blue: sky, police cars
+.Ve
+.SH "RETURN VALUES"
+.IX Header "RETURN VALUES"
+Calls to \fItie()\fR that try to implement IPC::Shareable will return true
+if successful, \fIundef\fR otherwise.
+.SH "INTERNALS"
+.IX Header "INTERNALS"
+When a variable is \fItie()\fRd, a blessed reference to a SCALAR is created.
+(This is true even if it is a HASH being \fItie()\fRd.)  The value thereby
+referred is an integer[4] ID that is used as a key in a hash called
+\fI%IPC::Shareable::Shm_Info\fR; this hash is created and maintained by
+IPC::Shareable to manage the variables it has \fItie()\fRd.  When
+IPC::Shareable needs to perform an operation on a \fItie()\fRd variable, it
+dereferences the blessed reference to perform a lookup in
+\fI%IPC::Shareable::Shm_Info\fR for the information needed to proceed.
+.PP
+\fI%IPC::Shareable::Shm_Info\fR has the following structure:
+.PP
+.Vb 1
+\&    %IPC::Shareable::Shm_Info = (
+.Ve
+.Vb 2
+\&        # - The id of an enchanted variable
+\&        $id => {
+.Ve
+.Vb 2
+\&            # -  A literal indicating the variable type
+\&            'type' => 'SCALAR' || 'HASH',
+.Ve
+.Vb 6
+\&            # - Shm segment IDs for this variable
+\&            'frag_id' => {
+\&                '0' => $id_1, # - ID of first shm segment
+\&                '1' => $id_2, # - ID of next shm segment
+\&                ... # - etc
+\&            },
+.Ve
+.Vb 2
+\&            # - ID of associated semaphores
+\&            'sem_id' => $semid,
+.Ve
+.Vb 2
+\&            # - The I<$glue> used when tie() was called
+\&            'key' => $glue,
+.Ve
+.Vb 2
+\&            # - The value of FLAGS for shmget() calls.
+\&            'flags' => $flags,
+.Ve
+.Vb 2
+\&            # - Destroy shm segements on exit?
+\&            'destroy' => $destroy,
+.Ve
+.Vb 2
+\&            # - Data cache
+\&            'DATA' => \e$data || \e%data,
+.Ve
+.Vb 5
+\&            # - The version number of the cached data
+\&            'version' => $version,
+\&            },
+\&       ...
+\&   );
+.Ve
+Perhaps the most important thing to note the existence of the
+\&\fI'DATA\*(R'\fR and \fI'version\*(R'\fR fields: data for all \fItie()\fRd variables is
+stored locally in a per-process cache.  When storing data, the values
+of the semaphores referred to by \fI$Shm_Info{$id}{'sem_id'}\fR are
+changed to indicate to the world a new version of the data is
+available. When retrieving data for a \fItie()\fRd variables, the values of
+these semaphores are examined to see if another process has created a
+more recent version than the cached version.  If a more recent version
+is available, it will be retrieved from shared memory and used. If no
+more recent version has been created, the cached version is used[5].
+.PP
+Another important thing to know is that IPC::Shareable allocates
+shared memory of a constant size SHM_BUFSIZ, where SHM_BUFSIZ is
+defined in this module.  If the amount of (serialized) data exceeds
+this value, it will be fragmented into multiple segments during a
+write operation and reassembled during a read operation.
+.SH "AUTHOR"
+.IX Header "AUTHOR"
+Benjamin Sugars <bsugars@canoe.ca>
+.SH "NOTES"
+.IX Header "NOTES"
+.Sh "Footnotes from the above sections"
+.IX Subsection "Footnotes from the above sections"
+.Ip "1" 4
+.IX Item "1"
+If \fI$glue\fR is longer than 4 characters, only the 4 most significant
+characters are used.  These characters are turned into integers by \fIunpack()\fRing
+them.  If \fI$glue\fR is less than 4 characters, it is space padded.
+.Ip "2" 4
+.IX Item "2"
+\s-1IPC::\s0Shareable provides no pre-set limits, but the system does.
+Namely, there are limits on the number of shared memory segments that
+can be allocated and the total amount of memory usable by shared
+memory.
+.Ip "3." 4
+.IX Item "3."
+If the process has been smoked by an untrapped signal, the binding
+will remain in shared memory.  If you're cautious, you might try
+.Sp
+.Vb 6
+\&    $SIG{INT} = \e&catch_int;
+\&    sub catch_int {
+\&        exit;
+\&    }
+\&    ...
+\&    tie($variable, IPC::Shareable, 'data', { 'destroy' => 'Yes!' });
+.Ve
+which will at least clean up after your user hits \s-1CTRL\s0\-C because
+\s-1IPC::\s0Shareable's \s-1DESTROY\s0 method will be called.  Or, maybe you'd like
+to leave the binding in shared memory, so subsequent process can
+recover the data...
+.Ip "4" 4
+.IX Item "4"
+The integer happens to be the shared memory \s-1ID\s0 of the first shared
+memory segment used to store the variable's data.
+.Ip "5" 4
+.IX Item "5"
+The exception to this is when the \s-1FIRSTKEY\s0 and \s-1NEXTKEY\s0 methods are
+implemented, presumably because of a call to \fIeach()\fR or \fIkeys()\fR.  In
+this case, the cached value is \s-1ALWAYS\s0 used until the end of the cached
+hash has been reached.  Then the cache is refreshed with the public
+version (if the public version is more recent).
+.Sp
+The reason for this is that if a (changed) public version is retrieved
+in the middle of a loop implemented via \fIeach()\fR or \fIkeys()\fR, chaos could
+result if another process added or removed a key from the hash being
+iterated over.  To guard against this, the cached version is always
+used during such cases.
+.Sh "General Notes"
+.IX Subsection "General Notes"
+.Ip "o" 4
+.IX Item "o"
+As mentioned in the \f(CWINTERNALS\fR entry elsewhere in this document shared memory segments are acquired
+with sizes of \s-1SHM_BUFSIZ\s0.  \s-1SHM_BUFSIZ\s0's largest possible value is
+nominally \s-1SHMMAX\s0, which is highly system-dependent.  Indeed, for some
+systems it may be defined at boot time.  If you can't seem to \fItie()\fR
+any variables, it may be that \s-1SHM_BUFSIZ\s0 is set a value that exceeds
+\s-1SHMMAX\s0 on your system.  Try reducing the size of this constant and
+recompiling the module.
+.Ip "o" 4
+.IX Item "o"
+The class contains a translation of the constants defined in the
+<sys/ipc.h>, <sys/shm.h>, and <sys/sem.h> header files.  These
+constants are used internally by the class and cannot be imported into
+a calling environment.  To do that, use \s-1IPC::\s0SysV instead.  Indeed, I
+would have used \s-1IPC::\s0SysV myself, but I haven't been able to get it to
+compile on any system I have access to :\-(.
+.Ip "o" 4
+.IX Item "o"
+There is a program called \fIipcs\fR\|(1/8) that is available on at least
+Solaris and Linux that might be useful for cleaning moribund shared
+memory segments or semaphore sets produced by bugs in either
+\s-1IPC::\s0Shareable or applications using it.
+.Ip "o" 4
+.IX Item "o"
+Set the variable \fI$\s-1IPC::\s0Shareable::Debug\fR to a true value to produce
+*many* verbose debugging messages on the standard error (I don't use
+the Perl debugger as much as I should... )
+.SH "BUGS"
+.IX Header "BUGS"
+Certainly; this is alpha software.
+.PP
+The first bug is that I do not know what all the bugs are. If you
+discover an anomaly, send me an email at bsugars@canoe.ca.
+.PP
+Variables that have been declared local with \fImy()\fR and subsequently
+\fItie()\fRd can act in a bizarre fashion if you store references in them.
+You can try not not using \fImy()\fR in these cases, or go through extra
+pain when dereferencing them, like this:
+.PP
+.Vb 9
+\&    #!/usr/bin/perl
+\&    use IPC::Shareable;
+\&    my $scalar;
+\&    tie($scalar, IPC::Shareable, { 'destroy' => 'yes' });
+\&    $scalar = [ 0 .. 9 ];
+\&    @array = @$scalar;
+\&    for (0 .. 9) {
+\&        print "$array[$_]\en"; # $$scalar won't work after 'my $scalar;'
+\&    }
+.Ve
+I suspect the reason for this is highly mystical and requires a wizard
+to explain.
+.SH "SEE ALSO"
+.IX Header "SEE ALSO"
+\fIperl\fR\|(1), \fIperltie\fR\|(1), \fIStorable\fR\|(3), \fIshmget\fR\|(2) and other SysV IPC man
+pages.
+
+.rn }` ''

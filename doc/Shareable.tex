@@ -1,0 +1,402 @@
+% LaTeX document produced by pod2latex from "Shareable.pm.pod".
+% The followings need be defined in the preamble of this document:
+%\def\C++{{\rm C\kern-.05em\raise.3ex\hbox{\footnotesize ++}}}
+%\def\underscore{\leavevmode\kern.04em\vbox{\hrule width 0.4em height 0.3pt}}
+%\setlength{\parindent}{0pt}
+
+\section{SHAREABLE.PM}%
+\index{SHAREABLE.PM}
+
+\subsection*{NAME}
+IPC::Shareable --- share Perl variables between processes
+
+\subsection*{SYNOPSIS}\begin{verbatim}
+  use IPC::Shareable;
+  tie($scalar, IPC::Shareable, $glue, { %options });
+  tie(%hash, IPC::Shareable, $glue, { %options });
+\end{verbatim}
+
+\subsection*{CONVENTIONS}%
+\index{CONVENTIONS}
+
+The occurrence of a number in square brackets, as in {\tt [}N{\tt ]}, in the text
+of this document refers to a numbered note in the the {\tt NOTES} entry elsewhere in this document.
+
+\subsection*{DESCRIPTION}
+IPC::Shareable allows you to tie a a variable to shared memory making
+it easy to share the contents of that variable with other Perl
+processes.  Currently either scalars or hashes can be tied; tying of
+arrays remains a work in progress.  However, the variable being tied
+may contain arbitrarily complex data structures --- including references
+to arrays, hashes of hashes, etc.
+
+The association between variables in distinct processes is provided by
+{\em \$glue\/}.  This is an integer number or 4 character string{\tt [}1{\tt ]} that serves
+as a common identifier for data across process space.  Hence the
+statement
+\begin{verbatim}
+        tie($scalar, IPC::Shareable, 'data');
+\end{verbatim}
+
+in program one and the statement
+\begin{verbatim}
+        tie($variable, IPC::Shareable, 'data');
+\end{verbatim}
+
+in program two will bind \$scalar in program one and \$variable in
+program two.  There is no pre-set limit to the number of processes
+that can bind to data; nor is there a pre-set limit to the size or
+complexity of the underlying data of the tied variables{\tt [}2{\tt ]}.
+
+The bound data structures are all linearized (using Raphael Manfredi's
+Storable module) before being slurped into shared memory.  Upon
+retrieval, the original format of the data structure is recovered.
+Semaphore flags are used for versioning and managing a per-process
+cache, allowing quick retrieval of data when, for instance, operating
+on a {\em tie()\/}d variable in a tight loop.
+
+\subsection*{OPTIONS}%
+\index{OPTIONS}
+
+Options are specified by passing a reference to a hash as the fourth
+argument to the tie function that enchants a variable.  Alternatively
+you can pass a reference to a hash as the third argument;
+IPC::Shareable will then look at the field named {\em 'key'\/} in this hash
+for the value of {\em \$glue\/}.  So,
+\begin{verbatim}
+        tie($variable, IPC::Shareable, 'data', \%options);
+\end{verbatim}
+
+is equivalent to
+\begin{verbatim}
+        tie($variable, IPC::Shareable, { 'key' => 'data', ... });
+\end{verbatim}
+
+When defining an options hash, values that match the word {\em 'no'\/} in a
+case-insensitive manner are treated as false.  Therefore, setting
+{\tt \$options\{'create'\} = 'No';} is the same as {\tt \$options\{'create'\} =
+0;}.
+
+The following fields are recognized in the options hash.
+
+\begin{description}
+
+\item[key]%
+\index{key@key}%
+
+The {\em 'key'\/} field is used to determine the {\em \$glue\/} if {\em \$glue\/} was
+not present in the call to {\em tie()\/}.  This argument is then, in turn,
+used as the KEY argument in subsequent calls to {\em shmget()\/} and {\em semget()\/}.
+If this field is not provided, a value of IPC\underscore{}PRIVATE is assumed,
+meaning that your variables cannot be shared with other
+processes. (Note that setting {\em \$glue\/} to 0 is the same as using
+IPC\underscore{}PRIVATE.)
+
+\item[create]%
+\index{create@create}%
+\hfil\\
+If {\em 'create'\/} is set to a true value, IPC::Shareable will create a new
+binding associated with {\em \$glue\/} if such a binding does not already
+exist.  If {\em 'create'\/} is false, calls to {\em tie()\/} will fail (returning
+undef) if such a binding does not already exist.  This is achieved by
+ORing IPC\underscore{}PRIVATE into FLAGS argument of calls to {\em shmget()\/} when
+{\em create\/} is true.
+
+\item[exclusive]%
+\index{exclusive@exclusive}%
+\hfil\\
+If {\em 'exclusive'\/} field is set to a true value, calls to {\em tie()\/} will
+fail (returning undef) if a data binding associated with {\em \$glue\/}
+already exists.  This is achieved by ORing IPC\underscore{} IPC\underscore{}EXCL into the
+FLAGS argument of calls to {\em shmget()\/} when {\em 'exclusive'\/} is true.
+
+\item[mode]%
+\index{mode@mode}%
+\hfil\\
+The {\em mode\/} argument is an octal number specifying the access
+permissions when a new data binding is being created.  These access
+permission are the same as file access permissions in that 0666 is
+world readable, 0600 is readable only by the effective UID of the
+process creating the shared variable, etc.  If not provided, a default
+of 0666 (world readable and writable) will be assumed.
+
+\item[destroy]%
+\index{destroy@destroy}%
+\hfil\\
+If set to a true value, the data binding will be destroyed when the
+process calling {\em tie()\/} exits (gracefully){\tt [}3{\tt ]}.
+
+\end{description}
+
+\subsection*{EXAMPLES}
+In a file called {\bf server}:
+\begin{verbatim}
+    #!/usr/bin/perl -w
+    use IPC::Shareable;
+    $glue = 'data';
+    %options = (
+        'create' => 'yes',
+        'exclusive' => 'no',
+        'mode' => 0644,
+        'destroy' => 'yes',
+    );
+    tie(%colours, IPC::Shareable, $glue, { %options }) or
+        die "server: tie failed\n";
+    %colours = (
+        'red' => [
+             'fire truck',
+             'leaves in the fall',
+        ],
+        'blue' => [
+             'sky',
+             'police cars',
+        ],
+    );
+    (print("server: there are 2 colours\n"), sleep 5)
+        while scalar keys %colours == 2;
+    print "server: here are all my colours:\n";
+    foreach $colour (keys %colours) {
+        print "server: these are $colour: ",
+            join(', ', @{$colours{$colour}}), "\n";
+    }
+    exit;
+\end{verbatim}
+
+In a file called {\bf client}
+\begin{verbatim}
+    #!/usr/bin/perl -w
+    use IPC::Shareable;
+    $glue = 'data';
+    %options = (
+        'key' => 'paint',
+        'create' => 'no',
+        'exclusive' => 'no',
+        'mode' => 0644,
+        'destroy' => 'no',
+        );
+    tie(%colours, IPC::Shareable, $glue, { %options }) or
+        die "client: tie failed\n";
+    foreach $colour (keys %colours) {
+        print "client: these are $colour: ",
+            join(', ', @{$colours{$colour}}), "\n";
+    }
+    delete $colours{'red'};
+    exit;
+\end{verbatim}
+
+And here is the output (the sleep commands in the command line prevent
+the output from being interrupted by shell prompts):
+\begin{verbatim}
+    bash$ ( ./server & ) ; sleep 10 ; ./client ; sleep 10
+    server: there are 2 colours
+    server: there are 2 colours
+    server: there are 2 colours
+    client: these are blue: sky, police cars
+    client: these are red: fire truck, leaves in the fall
+    server: here are all my colours:
+    server: these are blue: sky, police cars
+\end{verbatim}
+
+\subsection*{RETURN VALUES}%
+\index{RETURN VALUES}
+
+Calls to {\em tie()\/} that try to implement IPC::Shareable will return true
+if successful, {\em undef\/} otherwise.
+
+\subsection*{INTERNALS}%
+\index{INTERNALS}
+
+When a variable is {\em tie()\/}d, a blessed reference to a SCALAR is created.
+(This is true even if it is a HASH being {\em tie()\/}d.)  The value thereby
+referred is an integer{\tt [}4{\tt ]} ID that is used as a key in a hash called
+{\em \%IPC::Shareable::Shm\underscore{}Info\/}; this hash is created and maintained by
+IPC::Shareable to manage the variables it has {\em tie()\/}d.  When
+IPC::Shareable needs to perform an operation on a {\em tie()\/}d variable, it
+dereferences the blessed reference to perform a lookup in
+{\em \%IPC::Shareable::Shm\underscore{}Info\/} for the information needed to proceed.
+
+{\em \%IPC::Shareable::Shm\underscore{}Info\/} has the following structure:
+\begin{verbatim}
+    %IPC::Shareable::Shm_Info = (
+\end{verbatim}
+\begin{verbatim}
+        # - The id of an enchanted variable
+        $id => {
+\end{verbatim}
+\begin{verbatim}
+            # -  A literal indicating the variable type
+            'type' => 'SCALAR' || 'HASH',
+\end{verbatim}
+\begin{verbatim}
+            # - Shm segment IDs for this variable
+            'frag_id' => {
+                '0' => $id_1, # - ID of first shm segment
+                '1' => $id_2, # - ID of next shm segment
+                ... # - etc
+            },
+\end{verbatim}
+\begin{verbatim}
+            # - ID of associated semaphores
+            'sem_id' => $semid,
+\end{verbatim}
+\begin{verbatim}
+            # - The I<$glue> used when tie() was called
+            'key' => $glue,
+\end{verbatim}
+\begin{verbatim}
+            # - The value of FLAGS for shmget() calls.
+            'flags' => $flags,
+\end{verbatim}
+\begin{verbatim}
+            # - Destroy shm segements on exit?
+            'destroy' => $destroy,
+\end{verbatim}
+\begin{verbatim}
+            # - Data cache
+            'DATA' => \$data || \%data,
+\end{verbatim}
+\begin{verbatim}
+            # - The version number of the cached data
+            'version' => $version,
+            },
+       ...
+   );
+\end{verbatim}
+
+Perhaps the most important thing to note the existence of the
+{\em 'DATA'\/} and {\em 'version'\/} fields: data for all {\em tie()\/}d variables is
+stored locally in a per-process cache.  When storing data, the values
+of the semaphores referred to by {\em \$Shm\underscore{}Info\{\$id\}\{'sem\underscore{}id'\}\/} are
+changed to indicate to the world a new version of the data is
+available. When retrieving data for a {\em tie()\/}d variables, the values of
+these semaphores are examined to see if another process has created a
+more recent version than the cached version.  If a more recent version
+is available, it will be retrieved from shared memory and used. If no
+more recent version has been created, the cached version is used{\tt [}5{\tt ]}.
+
+Another important thing to know is that IPC::Shareable allocates
+shared memory of a constant size SHM\underscore{}BUFSIZ, where SHM\underscore{}BUFSIZ is
+defined in this module.  If the amount of (serialized) data exceeds
+this value, it will be fragmented into multiple segments during a
+write operation and reassembled during a read operation.
+
+\subsection*{AUTHOR}
+Benjamin Sugars $<$bsugars@canoe.ca$>$
+
+\subsection*{NOTES}
+\subsubsection*{Footnotes from the above sections}%
+\index{Footnotes from the above sections}
+
+\begin{enumerate}
+
+\item
+If {\em \$glue\/} is longer than 4 characters, only the 4 most significant
+characters are used.  These characters are turned into integers by {\em unpack()\/}ing
+them.  If {\em \$glue\/} is less than 4 characters, it is space padded.
+
+\item
+IPC::Shareable provides no pre-set limits, but the system does.
+Namely, there are limits on the number of shared memory segments that
+can be allocated and the total amount of memory usable by shared
+memory.
+
+\item
+If the process has been smoked by an untrapped signal, the binding
+will remain in shared memory.  If you're cautious, you might try
+\begin{verbatim}
+    $SIG{INT} = \&catch_int;
+    sub catch_int {
+        exit;
+    }
+    ...
+    tie($variable, IPC::Shareable, 'data', { 'destroy' => 'Yes!' });
+\end{verbatim}
+
+which will at least clean up after your user hits CTRL-C because
+IPC::Shareable's DESTROY method will be called.  Or, maybe you'd like
+to leave the binding in shared memory, so subsequent process can
+recover the data...
+
+\item
+The integer happens to be the shared memory ID of the first shared
+memory segment used to store the variable's data.
+
+\item
+The exception to this is when the FIRSTKEY and NEXTKEY methods are
+implemented, presumably because of a call to {\em each()\/} or {\em keys()\/}.  In
+this case, the cached value is ALWAYS used until the end of the cached
+hash has been reached.  Then the cache is refreshed with the public
+version (if the public version is more recent).
+
+The reason for this is that if a (changed) public version is retrieved
+in the middle of a loop implemented via {\em each()\/} or {\em keys()\/}, chaos could
+result if another process added or removed a key from the hash being
+iterated over.  To guard against this, the cached version is always
+used during such cases.
+
+\end{enumerate}
+
+\subsubsection*{General Notes}%
+\index{General Notes}
+
+\begin{description}
+
+\item[o]
+As mentioned in the {\tt INTERNALS} entry elsewhere in this documentshared memory segments are acquired
+with sizes of SHM\underscore{}BUFSIZ.  SHM\underscore{}BUFSIZ's largest possible value is
+nominally SHMMAX, which is highly system-dependent.  Indeed, for some
+systems it may be defined at boot time.  If you can't seem to {\em tie()\/}
+any variables, it may be that SHM\underscore{}BUFSIZ is set a value that exceeds
+SHMMAX on your system.  Try reducing the size of this constant and
+recompiling the module.
+
+\item[o]
+The class contains a translation of the constants defined in the
+$<$sys/ipc.h$>$, $<$sys/shm.h$>$, and $<$sys/sem.h$>$ header files.  These
+constants are used internally by the class and cannot be imported into
+a calling environment.  To do that, use IPC::SysV instead.  Indeed, I
+would have used IPC::SysV myself, but I haven't been able to get it to
+compile on any system I have access to :-(.
+
+\item[o]
+There is a program called {\em ipcs\/}(1/8) that is available on at least
+Solaris and Linux that might be useful for cleaning moribund shared
+memory segments or semaphore sets produced by bugs in either
+IPC::Shareable or applications using it.
+
+\item[o]
+Set the variable {\em \$IPC::Shareable::Debug\/} to a true value to produce
+$\ast$many$\ast$ verbose debugging messages on the standard error (I don't use
+the Perl debugger as much as I should... )
+
+\end{description}
+
+\subsection*{BUGS}
+Certainly; this is alpha software.
+
+The first bug is that I do not know what all the bugs are. If you
+discover an anomaly, send me an email at bsugars@canoe.ca.
+
+Variables that have been declared local with {\em my()\/} and subsequently
+{\em tie()\/}d can act in a bizarre fashion if you store references in them.
+You can try not not using {\em my()\/} in these cases, or go through extra
+pain when dereferencing them, like this:
+\begin{verbatim}
+    #!/usr/bin/perl
+    use IPC::Shareable;
+    my $scalar;
+    tie($scalar, IPC::Shareable, { 'destroy' => 'yes' });
+    $scalar = [ 0 .. 9 ];
+    @array = @$scalar;
+    for (0 .. 9) {
+        print "$array[$_]\n"; # $$scalar won't work after 'my $scalar;'
+    }
+\end{verbatim}
+
+I suspect the reason for this is highly mystical and requires a wizard
+to explain.
+
+\subsection*{SEE ALSO}
+{\em perl\/}(1), {\em perltie\/}(1), {\em Storable\/}(3), {\em shmget\/}(2) and other SysV IPC man
+pages.
+

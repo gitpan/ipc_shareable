@@ -1,0 +1,9 @@
+Changes
+COPYING
+DISCLAIMER
+MANIFEST
+Makefile.PL
+README
+Shareable.pm
+Shareable.xs
+test.pl
