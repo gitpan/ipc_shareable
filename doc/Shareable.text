@@ -559,8 +559,9 @@ CREDITS
     Thanks to all those with comments or bug fixes, especially
     Stephane Bortzmeyer <bortzmeyer@pasteur.fr>, Michael Stevens
     <michael@malkav.imaginet.co.uk>, Richard Neal
-    <richard@imaginet.co.uk>, and Jason Stevens
-    <jstevens@chron.com>.
+    <richard@imaginet.co.uk>, Jason Stevens <jstevens@chron.com>,
+    Maurice Aubrey <maurice@hevanet.com>, and Doug MacEachern
+    <dougm@telebusiness.co.nz>.
 
 BUGS
     Certainly; this is alpha software. When you discover an anomaly,

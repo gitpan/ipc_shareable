@@ -51,3 +51,9 @@ Revision history for Perl extension IPC::Shareable.
         - moved many subroutines so that they are auto-loaded; Ben
         Sugars.
         - updated man page; Ben Sugars.
+
+0.29  Mon Jan 12 13:49:42 EST 1998
+        - $MAXVER patch for when the version semaphore reaches its limit
+          and rolls back over to 0; Maurice Aubrey <maurice@hevanet.com>.
+        - patch to quieten things down under -w; Doug MacEachern
+          <dougm@telebusiness.co.nz>

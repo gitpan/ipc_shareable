@@ -10,7 +10,7 @@ use vars qw($VERSION $AUTOLOAD
 	    @ISA @EXPORT_OK
 	    %EXPORT_TAGS %Shm_Info
 	    $Package $Debug
-	    );
+	    $MAXVER);
 use subs qw(IPC_CREAT IPC_EXCL IPC_RMID IPC_STAT IPC_PRIVATE
 	    SHM_BUFSIZ SHM_HEADSIZE SHM_FOOTSIZE
 	    SHM_VERSSEM SHM_RLOCKSEM SHM_WLOCKSEM
@@ -28,9 +28,10 @@ use AutoLoader;
 @ISA = qw(DynaLoader);
 
 # --- Package globals
-$VERSION = '0.28';
+$VERSION = '0.29';
 $Package = 'IPC::Shareable';
 $Debug = ($Debug or undef);
+$MAXVER  = 32767;
 
 # --- The Autoload method as created by h2xs
 sub AUTOLOAD {
@@ -42,8 +43,12 @@ sub AUTOLOAD {
     ($constname = $AUTOLOAD) =~ s/.*:://;
     # --- For some reason I have to access $! here or autoloading doesn't work
     # --- with Perl 5.003.  If anybody knows why this is please email bsugars@canoe.ca
-    $! eq $!; # :-(
-    my $val = constant($constname, @_ ? $_[0] : 0);
+    my $errno = $! eq $!; # :-(
+    my $val;
+    {
+       local $^W = 0;
+       $val = constant($constname, @_ ? $_[0] : 0);
+    }
     if ($! != 0) {
 	if ($! =~ /Invalid/) {
 	    $AutoLoader::AUTOLOAD = $AUTOLOAD;
@@ -236,10 +241,13 @@ sub STORE {
     debug "$Package\:\:STORE: previous version number was $version";
 
     # --- Increment it
-    $opstring = pack('sss', SHM_VERSSEM, 1, 0);
-    semop($semid, $opstring) or
-	croak "$Package\:\:STORE: semop returned false";
-	
+    if ($version >= $MAXVER) { # semop will fail if we roll over
+      semctl($semid, 0, SETVAL, 1); 
+    } else {
+      $opstring = pack('sss', SHM_VERSSEM, 1, 0);
+      semop($semid, $opstring) or
+          croak "$Package\:\:STORE: semop returned false: $!";
+    }
     # --- Diagnostic
     $version = semctl($semid, 0, GETVAL, $arg) or
 	croak "$Package\:\:STORE: semop returned false";
@@ -1358,7 +1366,9 @@ the Perl debugger as much as I should... )
 Thanks to all those with comments or bug fixes, especially Stephane
 Bortzmeyer <bortzmeyer@pasteur.fr>, Michael Stevens
 <michael@malkav.imaginet.co.uk>, Richard Neal
-<richard@imaginet.co.uk>, and Jason Stevens <jstevens@chron.com>.
+<richard@imaginet.co.uk>, Jason Stevens <jstevens@chron.com>, Maurice
+Aubrey <maurice@hevanet.com>, and Doug MacEachern
+<dougm@telebusiness.co.nz>.
 
 =head1 BUGS
 

@@ -6,7 +6,9 @@ incorporated into a common codebase for everyone to benefit from
 - tying of arrays
 
 - rewriting the core of Shareable in C to gain speed and memory
-efficiency
+efficiency.  (Update as of January, 1998: I am presently working on
+this.  If anybody else has made progress in this area, please let me
+know so our efforts can be coordinated.)
 
 - perhaps add news ways to share data in addition to shared memory so
 that the module becomes portable
@@ -19,4 +21,4 @@ variable?
 
 --
 Ben Sugars <bsugars@canoe.ca>
-October 23, 1997.
+January 12, 1997.
